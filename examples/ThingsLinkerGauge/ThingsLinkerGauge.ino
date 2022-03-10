@@ -33,7 +33,7 @@ void loop()
   ThingsLinker().run(authToken);         // Setup project auth token
 
   // 'setGauge' has two parameters 
-  // 1 - You can pass Virtual pin. ex: V1 to V24
+  // 1 - You can pass Virtual pin. ex: V0 to V24
   // 2 - Put Sensor value as a floating format
   ThingsLinker().setGauge("V0",y);        
   delay(3000);
