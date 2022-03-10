@@ -55,8 +55,8 @@ void ThingsLinker::run(String authToken)
   int httpCode = http.GET();
   if (httpCode == 200)
   {
-    Serial.println("Success");
-    Serial.println(httpCode);
+    // Serial.println("Success");
+    // Serial.println(httpCode);
   }
   else
   {
@@ -65,9 +65,9 @@ void ThingsLinker::run(String authToken)
   }
 }
 
-int ThingsLinker::setOnOff(String pin)
+int ThingsLinker::getOnOff(String pin)
 {
-  DynamicJsonDocument root(1536*2);
+  DynamicJsonDocument root(1536 * 2);
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
@@ -95,19 +95,18 @@ int ThingsLinker::setOnOff(String pin)
   return deviceStatus;
 }
 
-int ThingsLinker::setTimerOnOff(String pin)
+int ThingsLinker::getTimerOnOff(String pin)
 {
-  DynamicJsonDocument root(1536*2);
-  // JsonObject root = deserializeJson(jsonBuffer,http.getString());
+  DynamicJsonDocument root(1536 * 2);
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
     Serial.print(F("deserializeJson() failed with code "));
     Serial.println(error.c_str());
   }
+  String currentTime = root[config.currentTime];
   String body = root[config.body];
   deserializeJson(root, body);
-  String currentTime = root[config.currentTime];
   JsonArray jsonArray = root.as<JsonArray>();
   for (int i = 0; i < jsonArray.size(); i++)
   {
@@ -117,6 +116,9 @@ int ThingsLinker::setTimerOnOff(String pin)
     String startTime = jsonObject[config.startTime];
     String stopTime = jsonObject[config.stopTime];
     String id = jsonObject[config._id];
+
+    Serial.println("Current time1 " + currentTime);
+    // Serial.println(startTime);
 
     if (deviceType == "Timer")
     {
@@ -152,8 +154,8 @@ void ThingsLinker::putTimer(String id, String timerStatus)
   String payload = http.getString();
   if (httpCode == 200)
   {
-    Serial.println("Success");
-    Serial.println(httpCode);
+    // Serial.println("Success");
+    // Serial.println(httpCode);
   }
   else
   {
@@ -162,9 +164,9 @@ void ThingsLinker::putTimer(String id, String timerStatus)
   }
 }
 
-int ThingsLinker::setSlider(String pin)
+int ThingsLinker::getSlider(String pin)
 {
-  DynamicJsonDocument root(1536*2);
+  DynamicJsonDocument root(1536 * 2);
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
@@ -190,10 +192,10 @@ int ThingsLinker::setSlider(String pin)
   return deviceStatus;
 }
 
-void ThingsLinker::setData(String pin, float sensorValue)
+void ThingsLinker::setGauge(String pin, float sensorValue)
 {
   delay(2000);
-  DynamicJsonDocument root(1536*2);
+  DynamicJsonDocument root(1536 * 2);
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {

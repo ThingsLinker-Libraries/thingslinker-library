@@ -30,14 +30,11 @@ void setup()
 
 void loop()
 {
-  ThingsLinker().run(authToken);          // Setup project auth token
-  if (ThingsLinker().getOnOff("V0") == 0) // You can pass Virtual pin. ex: V0 to V24, Get value
-  {
-    digitalWrite(LED, LOW);
-  }
-  else if (ThingsLinker().getOnOff("V0") == 1) // You can pass Virtual pin. ex: V0 to V24, Get value
-  {
-    digitalWrite(LED, HIGH);
-  }
+  ThingsLinker().run(authToken);         // Setup project auth token
+
+  // 'getSlider' has one parameters 
+  // 1 - You can pass Virtual pin. ex: V0 to V24
+  // 2 - Get Slider value
+  ThingsLinker().getSlider("V0");        
   delay(3000);
 }

@@ -28,11 +28,11 @@ public:
   ThingsLinker(String pin);
   void setWifi();
   void run(String authToken);
-  int setOnOff(String pin);
-  int setTimerOnOff(String pin);
+  int getOnOff(String pin);
+  int getTimerOnOff(String pin);
+  int getSlider(String pin);
   void putTimer(String pin,String timerStatus);
-  void setData(String pin, float sensorValue);
-  int setSlider(String pin);
+  void setGauge(String pin, float sensorValue);
 };
 
 #endif

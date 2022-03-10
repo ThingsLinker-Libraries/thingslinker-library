@@ -30,14 +30,11 @@ void setup()
 
 void loop()
 {
-  ThingsLinker().run(authToken);          // Setup project auth token
-  if (ThingsLinker().getOnOff("V0") == 0) // You can pass Virtual pin. ex: V0 to V24, Get value
-  {
-    digitalWrite(LED, LOW);
-  }
-  else if (ThingsLinker().getOnOff("V0") == 1) // You can pass Virtual pin. ex: V0 to V24, Get value
-  {
-    digitalWrite(LED, HIGH);
-  }
+  ThingsLinker().run(authToken);         // Setup project auth token
+
+  // 'setGauge' has two parameters 
+  // 1 - You can pass Virtual pin. ex: V1 to V24
+  // 2 - Put Sensor value as a floating format
+  ThingsLinker().setGauge("V0",y);        
   delay(3000);
 }

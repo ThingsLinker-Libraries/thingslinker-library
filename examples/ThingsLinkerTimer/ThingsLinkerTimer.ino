@@ -31,11 +31,11 @@ void setup()
 void loop()
 {
   ThingsLinker().run(authToken);          // Setup project auth token
-  if (ThingsLinker().getOnOff("V0") == 0) // You can pass Virtual pin. ex: V0 to V24, Get value
+  if (ThingsLinker().getTimerOnOff("V0") == 0) // You can pass Virtual pin. ex: V0 to V24, Get value
   {
     digitalWrite(LED, LOW);
   }
-  else if (ThingsLinker().getOnOff("V0") == 1) // You can pass Virtual pin. ex: V0 to V24, Get value
+  else if (ThingsLinker().getTimerOnOff("V0") == 1) // You can pass Virtual pin. ex: V0 to V24, Get value
   {
     digitalWrite(LED, HIGH);
   }
