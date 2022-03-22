@@ -129,14 +129,16 @@ int ThingsLinker::getTimerOnOff(String pin)
         {
           if (currentTime == startTime)
           {
-            putTimer(id, "1");
+            String postData = "&" + config.deviceStatus + "=" + "1";
+            putTimer(id, postData);
           }
         }
         else
         {
           if (currentTime == stopTime)
           {
-            putTimer(id, "0");
+            String postData = "&" + config.deviceStatus + "=" + "0" + "&" + config.startTime + "=" + "00:00" + "&" + config.stopTime + "=" + "00:00";
+            putTimer(id, postData);
           }
         }
       }
@@ -145,9 +147,8 @@ int ThingsLinker::getTimerOnOff(String pin)
   return deviceStatus;
 }
 
-void ThingsLinker::putTimer(String id, String timerStatus)
+void ThingsLinker::putTimer(String id, String postData)
 {
-  String postData = "&" + config.deviceStatus + "=" + timerStatus;
   http.begin(client, config.BASH_URL + config.DEVICEENDPOINT + id);
   http.addHeader(config.CONTENTTYPE, config.CONTENTTYPEVALUE);
   int httpCode = http.PUT(postData);
