@@ -42,8 +42,8 @@ void loop()
   thingsLinker.run(authToken);
 }
 ```
-
-# Setup Button Widget and Get Value
+# Widgets 
+- <h3>Setup Button Widget and Get Value</h3>
 
 ```cpp
 void loop()
@@ -65,7 +65,7 @@ void loop()
 }
 ```
 
-# Setup Gauge Widget
+- <h3>Setup Gauge Widget</h3>
 
 ```cpp
 void loop()
@@ -78,10 +78,7 @@ void loop()
 }
 ```
 
-# Setup Slider Widget and Get Value
-
-
-# Setup Gauge Widget
+- <h3>Setup Slider Widget and Get Value</h3>
 
 ```cpp
 void loop()
@@ -94,7 +91,7 @@ void loop()
 }
 ```
 
-#  Setup Timer Widget and Get Value
+- <h3>Setup Timer Widget and Get Value</h3>
 
 ```cpp
 void loop()
