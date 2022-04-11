@@ -32,7 +32,7 @@ void setup()
 
 void loop()
 {
-  thingsLinker.run(authToken);          // Setup project auth token
+  thingsLinker.run(authToken);  // Setup project auth token
 
   Serial.print("Status: ");
   Serial.println(thingsLinker.getTimerOnOff("V0"));
