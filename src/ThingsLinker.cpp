@@ -117,7 +117,7 @@ int ThingsLinker::getTimerOnOff(String pin)
     String stopTime = jsonObject[config.stopTime];
     String id = jsonObject[config._id];
 
-    Serial.println("Current time1 " + currentTime);
+    //Serial.println("Current time1 " + currentTime);
     // Serial.println(startTime);
 
     if (deviceType == "Timer")

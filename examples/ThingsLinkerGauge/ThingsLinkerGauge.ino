@@ -14,6 +14,8 @@
 
 #include <ThingsLinker.h>
 
+ThingsLinker thingsLinker;
+
 const char *authToken = "YourAuthToken"; //You can get auth token in the ThingsLinker App.
 
 const char *ssid = "YourWifiName";
@@ -30,11 +32,15 @@ void setup()
 
 void loop()
 {
-  ThingsLinker().run(authToken);         // Setup project auth token
+  thingsLinker.run(authToken);         // Setup project auth token
+
+  float y = random(1, 401) / 100.0;
+  Serial.print("Value: ");
+  Serial.println(y);
 
   // 'setGauge' has two parameters 
   // 1 - You can pass Virtual pin. ex: V0 to V24
   // 2 - Put Sensor value as a floating format
-  ThingsLinker().setGauge("V0",y);        
+  thingsLinker.setGauge("V0",y);       
   delay(3000);
 }

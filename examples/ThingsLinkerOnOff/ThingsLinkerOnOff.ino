@@ -14,6 +14,8 @@
 
 #include <ThingsLinker.h>
 
+ThingsLinker thingsLinker;
+
 const char *authToken = "YourAuthToken"; //You can get auth token in the ThingsLinker App.
 
 const char *ssid = "YourWifiName";
@@ -30,12 +32,16 @@ void setup()
 
 void loop()
 {
-  ThingsLinker().run(authToken);          // Setup project auth token
-  if (ThingsLinker().getOnOff("V0") == 0) // You can pass Virtual pin. ex: V0 to V24, Get value
+  thingsLinker.run(authToken);          // Setup project auth token
+
+  Serial.print("Status: ");
+  Serial.println(thingsLinker.getOnOff("V0"));
+
+  if (thingsLinker.getOnOff("V0") == 0) // You can pass Virtual pin. ex: V0 to V24, Get value
   {
     digitalWrite(LED, LOW);
   }
-  else if (ThingsLinker().getOnOff("V0") == 1) // You can pass Virtual pin. ex: V0 to V24, Get value
+  else if (thingsLinker.getOnOff("V0") == 1) // You can pass Virtual pin. ex: V0 to V24, Get value
   {
     digitalWrite(LED, HIGH);
   }
