@@ -41,5 +41,5 @@ void loop()
   // 1 - You can pass Virtual pin. ex: V0 to V24
   // 2 - Get Slider value
   thingsLinker.getSlider("V0");        
-  delay(3000);
+  delay(1000);
 }

@@ -42,5 +42,5 @@ void loop()
   // 1 - You can pass Virtual pin. ex: V0 to V24
   // 2 - Put Sensor value as a floating format
   thingsLinker.setGauge("V0",y);       
-  delay(3000);
+  delay(1000);
 }
