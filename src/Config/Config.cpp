@@ -15,7 +15,7 @@ Config::Config()
 }
 
 String Config::BASH_URL = 
-"http://eadyum.herokuapp.com/";
+"https://thingslinker.herokuapp.com/";
 
 String Config::ENDPOINT = 
 "devicesESP/";
