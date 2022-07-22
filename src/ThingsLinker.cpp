@@ -149,6 +149,7 @@ int ThingsLinker::getTimerOnOff(String pin)
 
 void ThingsLinker::putTimer(String id, String postData)
 {
+  HTTPClient http;
   http.begin(client, config.BASH_URL + config.DEVICEENDPOINT + id);
   http.addHeader(config.CONTENTTYPE, config.CONTENTTYPEVALUE);
   int httpCode = http.PUT(postData);
@@ -217,6 +218,7 @@ void ThingsLinker::setGauge(String pin, float sensorValue)
       if (devicePin == pin)
       {
         String postData = "&" + config.deviceStatus + "=" + sensorValue;
+        HTTPClient http;
         http.begin(client, config.BASH_URL + config.DEVICEENDPOINT + id);
         http.addHeader(config.CONTENTTYPE, config.CONTENTTYPEVALUE);
         int httpCode = http.PUT(postData);
