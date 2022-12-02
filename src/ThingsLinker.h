@@ -33,6 +33,7 @@ public:
   int getSlider(String pin);
   void putTimer(String pin,String timerStatus);
   void setGauge(String pin, float sensorValue);
+  void setDisplay(String pin, float sensorValue);
 };
 
 #endif
