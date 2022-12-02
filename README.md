@@ -65,6 +65,19 @@ void loop()
 }
 ```
 
+- <h3>Setup Display Widget</h3>
+
+```cpp
+void loop()
+{
+  // 'setDisplay' has two parameters 
+  // 1 - You can pass Virtual pin. ex: V0 to V24
+  // 2 - Put Sensor value as a floating format
+
+ thingsLinker.setDisplay("V0”, ”Put sensor value”);
+}
+```
+
 - <h3>Setup Gauge Widget</h3>
 
 ```cpp
