@@ -15,7 +15,7 @@ Config::Config()
 }
 
 String Config::BASH_URL = 
-"http://thingslinker.herokuapp.com/";
+"http://192.168.1.79:3000/"; 
 
 String Config::ENDPOINT = 
 "devicesESP/";
