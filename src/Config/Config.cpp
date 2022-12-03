@@ -15,7 +15,7 @@ Config::Config()
 }
 
 String Config::BASH_URL = 
-"http://192.168.1.79:3000/"; 
+"https://server.thingslinker.com/"; 
 
 String Config::ENDPOINT = 
 "devicesESP/";
