@@ -14,8 +14,7 @@ Config::Config()
 {
 }
 
-String Config::BASH_URL = 
-"https://server.thingslinker.com/"; 
+String Config::BASH_URL = "https://server.thingslinker.com/"; 
 
 String Config::ENDPOINT = 
 "devicesESP/";
