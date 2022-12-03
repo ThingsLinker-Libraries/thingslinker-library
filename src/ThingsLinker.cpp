@@ -15,11 +15,14 @@
 #include <Arduino.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
+
 
 Config config;
 int deviceStatus = 0;
 HTTPClient http;
-WiFiClient client;
+WiFiClientSecure client;
+
 ThingsLinker::ThingsLinker()
 {
 }
@@ -49,7 +52,8 @@ void ThingsLinker::run(String authToken)
 
   StaticJsonDocument<200> jsonBuffer;
   JsonObject root = jsonBuffer.as<JsonObject>();
-
+  client.setInsecure(); //the magic line, use with caution
+  client.connect(config.BASH_URL + config.ENDPOINT + authToken, 443);
   http.begin(client, config.BASH_URL + config.ENDPOINT + authToken);
   http.addHeader(config.CONTENTTYPE, config.CONTENTTYPEVALUE);
   int httpCode = http.GET();
@@ -71,7 +75,7 @@ int ThingsLinker::getOnOff(String pin)
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
-    Serial.print(F("deserializeJson() failed with code "));
+    Serial.print(F("Request failed "));
     Serial.println(error.c_str());
   }
   String body = root[config.body];
@@ -101,7 +105,7 @@ int ThingsLinker::getTimerOnOff(String pin)
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
-    Serial.print(F("deserializeJson() failed with code "));
+    Serial.print(F("Request failed "));
     Serial.println(error.c_str());
   }
   String currentTime = root[config.currentTime];
@@ -172,7 +176,7 @@ int ThingsLinker::getSlider(String pin)
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
-    Serial.print(F("deserializeJson() failed with code "));
+    Serial.print(F("Request failed "));
     Serial.println(error.c_str());
   }
   String body = root[config.body];
@@ -201,7 +205,7 @@ void ThingsLinker::setGauge(String pin, float sensorValue)
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
-    Serial.print(F("deserializeJson() failed with code "));
+    Serial.print(F("Request failed "));
     Serial.println(error.c_str());
   }
   String body = root[config.body];
@@ -225,12 +229,12 @@ void ThingsLinker::setGauge(String pin, float sensorValue)
         String payload = http.getString();
         if (httpCode == 200)
         {
-          Serial.println("Sensor success");
+          Serial.println("Request success");
           Serial.println(httpCode);
         }
         else
         {
-          Serial.println("Sensor fail");
+          Serial.println("Request failed");
           Serial.println(httpCode);
         }
       }
@@ -246,7 +250,7 @@ void ThingsLinker::setDisplay(String pin, float sensorValue)
   DeserializationError error = deserializeJson(root, http.getString());
   if (error)
   {
-    Serial.print(F("deserializeJson() failed with code "));
+    Serial.print(F("Request failed "));
     Serial.println(error.c_str());
   }
   String body = root[config.body];
@@ -270,12 +274,12 @@ void ThingsLinker::setDisplay(String pin, float sensorValue)
         String payload = http.getString();
         if (httpCode == 200)
         {
-          Serial.println("Sensor success");
+          Serial.println("Request success");
           Serial.println(httpCode);
         }
         else
         {
-          Serial.println("Sensor fail");
+          Serial.println("Request failed");
           Serial.println(httpCode);
         }
       }
