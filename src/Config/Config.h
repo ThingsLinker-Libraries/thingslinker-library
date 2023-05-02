@@ -11,25 +11,29 @@
 #define CONFIG_H
 #include <Arduino.h>
 #ifdef CONFIG_H
+
+#ifdef ESP32
+#include <WiFi.h>
+#elif defined(ESP8266)
+#include <ESP8266WiFi.h>
+#else
+#error "Unsupported platform"
+#endif
 class Config
 {
 private:
-
 public:
     Config();
-    static String BASH_URL;
-    static String ENDPOINT;
-    static String DEVICEENDPOINT;
-    static const char *CONTENTTYPE;
-    static const char *CONTENTTYPEVALUE;
+    static const char *MQTTSERVER;
+    static const int MQTTPORT;
+    static const char *TOPIC;
     static const char *devicePin;
-    static const char *deviceType;
-    static String deviceStatus;
-    static const char *body;
-    static const char *currentTime;
-    static const char *startTime;
-    static const char *stopTime;
-    static const char *_id;
+    static const char *deviceStatus;
+    String getESP32ChipId();
+    String getESP8266ChipId();
+    String base64_encode(String str);
+    String base64Decode(String base64Encoded);
+    int countPadding(String base64Encoded);
 };
 
 #endif
