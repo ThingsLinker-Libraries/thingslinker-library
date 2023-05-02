@@ -5,42 +5,36 @@
   projects by simply dragging and dropping widgets.
 
   Downloads, docs, tutorials: https://blog.thingslinker.com/
-   
+
   This example code is in public domain.
 
  *************************************************************
   Project setup by ThingsLinker:
  *************************************************************/
 
-#include <ThingsLinker.h>
 
-ThingsLinker thingsLinker;
 
-const char *authToken = "YourAuthToken"; //You can get auth token in the ThingsLinker App.
+#include <ThingsLinker.h>  // Include ThingsLinker library
 
-const char *ssid = "YourWifiName";
-const char *password = "YourWifiPassword";
+ThingsLinker thingsLinker;  // Create an instance of the ThingsLinker class
 
-int LED = D1;
+const char *authToken = "YourAuthToken";  // Authentication token for ThingsLinker platform
+const char *ssid = "YourWifiName";  // Wi-Fi network's SSID
+const char *password = "YourWifiPassword";  // Wi-Fi network's password
 
 void setup()
 {
-  Serial.begin(9600);
-  ThingsLinker(ssid, password); // Setup wifi connect using ThingsLinker constructor.
-  pinMode(LED, OUTPUT);
+  Serial.begin(115200);  // Initialize serial communication with baud rate 115200
+  thingsLinker.begin(ssid, password, authToken);  // Initialize ThingsLinker class with Wi-Fi credentials and authentication token
 }
 
 void loop()
 {
-  thingsLinker.run(authToken);         // Setup project auth token
+  thingsLinker.loop();  // Check for incoming data from subscribed pins
 
-  float y = random(1, 401) / 100.0;
-  Serial.print("Value: ");
-  Serial.println(y);
+  float y = random(1, 401) / 100.0;  // Generate a random float between 1 and 4, with two decimal places
+  Serial.print("Value: ");  // Print message to serial monitor
+  Serial.println(y);  // Print generated value to serial monitor
 
-  // 'setDisplay' has two parameters 
-  // 1 - You can pass Virtual pin. ex: V0 to V24
-  // 2 - Put Sensor value as a floating format
-  thingsLinker.setDisplay("V0",y);       
-  delay(1000);
+  thingsLinker.setDisplay("V3", y);  // Send generated value to pin "V3" on ThingsLinker platform for display
 }

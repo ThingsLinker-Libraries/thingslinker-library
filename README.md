@@ -1,128 +1,200 @@
+
+
+```cpp
+  _______ _     _                 _ _       _             
+ |__   __| |   (_)               | (_)     | |            
+    | |  | |__  _ _ __   __ _ ___| |_ _ __ | | _____ _ __ 
+    | |  | '_ \| | '_ \ / _` / __| | | '_ \| |/ / _ \ '__|
+    | |  | | | | | | | | (_| \__ \ | | | | |   <  __/ |   
+    |_|  |_| |_|_|_| |_|\__, |___/_|_|_| |_|_|\_\___|_|   
+                         __/ |                            
+                        |___/                             
+```
+
 # ThingsLinker Arduino Library
 
-<h3>ThingsLinker was designed for the Internet of Things. It can control hardware remotely, it can display sensor data, it can store data, visualize it, and do many other cool things.</h3>
+<h3>Now, the ThingsLinker library has added support for the MQTT protocol. The library uses the PubSubClient library, which can be found at <a href="http://arduino.cc/en/guide/libraries" rel="nofollow">http://arduino.cc/en/guide/libraries</a>, to enable MQTT functionality.</h3>
+<br>
+<h3>ThingsLinker was specifically designed for the Internet of Things (IoT), with a wide range of capabilities. It allows for remote control of hardware, display of sensor data, data storage, visualization, and much more. With its versatile features, ThingsLinker provides a comprehensive solution for managing IoT devices and data.</h3>
+<br>
+ <ul><li>With ThingsLinker, you can easily connect and control both ESP8266 and ESP32 devices. Whether you use the iOS or Android application or the website, ThingsLinker enables seamless remote control of your devices.</li></ul>
 
- <ul><li>Connect Esp8266 and Esp32 device using ThingsLinker platform. You can control devices using Android Mobile Phone , Website and Linux Desktop.</li></ul>
+# Installation 
 
-# <h3>How to use ThingsLinker library</h3>
- <p>&emsp; Step 1 - Download the ThingsLinker library</p>
- <p>&emsp; Step 2 - Import this library to Arduino IDE. Guide <a href="http://arduino.cc/en/guide/libraries" rel="nofollow">here</a></p>
- <p>&emsp; Step 3 - In Arduino IDE, select File -> Examples -> ThingsLinker -> ThingsLinkerOnOff</p>
- <p>&emsp; Step 4 - Update Auth Token in the sketch and upload it to Arduino</p>
- <p></p>
+<h3>To use the ThingsLinker library, follow these steps:</h3>
+<br>
+ <p>&emsp; 1. Download the ThingsLinker library</p>
+ <p>&emsp; 2. Import the library to Arduino IDE (check out the guide <a href="http://arduino.cc/en/guide/libraries" rel="nofollow">here</a>)</p>
+ <p>&emsp; 3. In Arduino IDE, select File -> Examples -> ThingsLinker -> ThingsLinkerButton</p>
+ <p>&emsp; 4. Update your auth token in the sketch and upload it to your Arduino device</p>
+<br>
 
-# Usage : 
+# Usage
 
-- <h3>Include in your sketch</h3>
+- <h3>To use the ThingsLinker library in your sketch, include the following line at the top:</h3>
 
 ```cpp
 #include <ThingsLinker.h>
 ```
-- Initialize library, in your setup function add, NOTE if you are using non blocking you will make sure you create this in global scope or handle appropriatly , it will not work if in setup and using non blocking mode.
+
+- This statement creates an instance of the ThingsLinker library called "thingsLinker." This instance can be used to access the various functions and features provided by ThingsLinker.
 
 ```cpp
 ThingsLinker thingsLinker;
 ```
 
-- Setup wifi connect using ThingsLinker constructor.
+- This statement calls the "begin" function of the thingsLinker instance, which initializes the library with the provided SSID, password, and authentication token parameters. This allows the device to connect to the network and authenticate with the ThingsLinker platform to enable IoT functionality.
 
 ```cpp
 void setup()
 {
- //first parameter is name of access point, second is the password
- ThingsLinker(ssid, password); 
+ thingsLinker.begin(ssid, password, authToken);
 }
 ```
 
-- Setup project auth token
+- This statement calls the "subscribePin" function of the thingsLinker instance, which subscribes to changes in the virtual pin "V0". This enables the device to receive updates when the value of V0 changes and allows for remote control of the pin through the ThingsLinker platform.
+
+```cpp
+void setup()
+{
+  thingsLinker.subscribePin("V0");
+}
+```
+
+- This statement calls the "setCallback" function of the thingsLinker instance, which sets the callback function to be executed when a message is received on any subscribed virtual pin. The callback function can be defined by the user and can be used to process incoming data or execute specific actions based on the received message.
+
+```cpp
+void setup()
+{
+  thingsLinker.setCallback(callback);
+}
+```
+
+- This is an example of a callback function that can be used with ThingsLinker. In this example, the "getButtonAsInt" function is called to retrieve the current value of virtual pin "V0" and store it in the "buttonStatus" variable. The variable is then printed to the serial monitor. The user can add their own logic to the function to process the retrieved data or execute specific actions based on the received message.
+
+```cpp
+void callback()
+{
+  int buttonStatus = thingsLinker.getButtonAsInt("V0"); 
+
+  Serial.print("Get Button Status: "); 
+  Serial.println(buttonStatus);
+
+  // Your code here
+}
+```
+
+- This statement calls the "loop" function of the thingsLinker instance, which allows the library to continuously listen for incoming messages and execute the associated callback function when a message is received. This function should be called in the device's main loop to enable ThingsLinker to function correctly.
 
 ```cpp
 void loop()
 {
-  thingsLinker.run(authToken);
+  thingsLinker.loop();
 }
 ```
-# Widgets 
-- <h3>Setup Button Widget and Get Value</h3>
+- This example shows how to use the `setDisplay` function to publish data on the ThingsLinker platform.
 
 ```cpp
 void loop()
 {
-  //You can pass Virtual pin. ex: V0 to V24, Get value
-  //  You get status 0 or  1
-  // You can setup your logic inside the conditions
+  float y = random(1, 401) / 100.0;  /
+  Serial.print("Value: ");  
+  Serial.println(y);  
 
-  if (thingsLinker.getOnOff("V0") == 0) 
-   {
-     digitalWrite(LED, LOW);
-   }
-   else if (thingsLinker.getOnOff("V0") == 1)
-   {
-     digitalWrite(LED, HIGH);
-   }
-
-   thingsLinker.getOnOff("V0”); 
+  thingsLinker.setDisplay("V3", y); 
 }
 ```
 
-- <h3>Setup Display Widget</h3>
+# ThingsLinker Widgets Examples
+
+<h3>ThingsLinker offers various widgets that you can use to display or publish data. Here are some examples:</h3>
+<br>
+
+<h2>Get Button Value Example</h2>
+<br>
+<p>This example shows how to retrieve an integer value from the ThingsLinker platform by calling the `getButtonAsInt` method of the `thingsLinker` object.</p>
 
 ```cpp
-void loop()
+void callback()
 {
-  // 'setDisplay' has two parameters 
-  // 1 - You can pass Virtual pin. ex: V0 to V24
-  // 2 - Put Sensor value as a floating format
+  int buttonStatus = thingsLinker.getButtonAsInt("V0"); 
 
- thingsLinker.setDisplay("V0”, ”Put sensor value”);
-}
-```
+  Serial.print("Get Button Status: "); 
+  Serial.println(buttonStatus);
 
-- <h3>Setup Gauge Widget</h3>
-
-```cpp
-void loop()
-{
-  // 'setGauge' has two parameters 
-  // 1 - You can pass Virtual pin. ex: V0 to V24
-  // 2 - Put Sensor value as a floating format
-
- thingsLinker.setGauge("V0”, ”Put sensor value”);
-}
-```
-
-- <h3>Setup Slider Widget and Get Value</h3>
-
-```cpp
-void loop()
-{
-  // 'getSlider' has one parameters 
-  // 1 - You can pass Virtual pin. ex: V0 to V24
-  // 2 - Get Slider value 0 to 100
-
-  thingsLinker.getSlider("V0");  
-}
-```
-
-- <h3>Setup Timer Widget and Get Value</h3>
-
-```cpp
-void loop()
-{
- //You can pass Virtual pin. ex: V0 to V24, Get value
- //  You get status 0 or  1
- // You can setup your logic inside the conditions
-
- if (thingsLinker.getTimerOnOff("V0") == 0) 
+  if (buttonStatus == 0) 
   {
-    digitalWrite(LED, LOW);
+    digitalWrite(LED_PIN, LOW); 
   }
-  else if (thingsLinker.getTimerOnOff("V0") == 1)
+  else if (buttonStatus == 1) 
   {
-    digitalWrite(LED, HIGH);
+    digitalWrite(LED_PIN, HIGH); 
   }
+}
+```
 
-  thingsLinker.getTimerOnOff("V0”); 
+<h2>Set Display Example</h2>
+<br>
+<p>This example shows how to use the `setDisplay` function to publish data on the ThingsLinker platform.</p>
+
+```cpp
+void loop()
+{
+  float y = random(1, 401) / 100.0;  /
+  Serial.print("Value: ");  
+  Serial.println(y);  
+
+  thingsLinker.setDisplay("V3", y); 
+}
+```
+
+<h2>Set Gauge Example</h2>
+<br>
+<p>This example shows how to use the `setGauge` function to publish data on the ThingsLinker platform for gauge display.</p>
+
+```cpp
+void loop()
+{
+  float y = random(1, 401) / 100.0;  
+  Serial.print("Value: ");  
+  Serial.println(y); 
+
+  thingsLinker.setGauge("V3", y);  platform for gauge display
+  delay(1000); 
+}
+```
+
+<h2>Get Slider Value Example</h2>
+<br>
+<p>This example shows how to retrieve an integer value from the ThingsLinker platform by calling the `getSliderAsInt` method of the `thingsLinker` object.</p>
+
+```cpp
+void loop()
+{
+  int sliderValue = thingsLinker.getSliderAsInt("V0");
+  Serial.print("Get getSliderAsInt: "); 
+  Serial.println(sliderValue);         
+}
+```
+
+<h2>Get Timer Value Example</h2>
+<br>
+<p>This example shows how to retrieve an integer value from the ThingsLinker platform by calling the `getTimerAsInt` method of the `thingsLinker` object.</p>
+
+```cpp
+void callback()
+{
+  int timerStatus = thingsLinker.getTimerAsInt("V0");
+  Serial.print("Get Button Status: ");
+  Serial.println(timerStatus);
+  if (timerStatus == 0)
+  {
+    digitalWrite(LED_PIN, LOW); 
+  }
+  else if (timerStatus == 1)
+  {
+    digitalWrite(LED_PIN, HIGH);
+  }
 }
 ```
 
