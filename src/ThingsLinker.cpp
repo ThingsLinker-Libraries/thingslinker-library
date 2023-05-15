@@ -181,7 +181,6 @@ void ThingsLinker::callbackMqtt(char *topic, byte *payload, unsigned int length)
     String s = doc[config.deviceStatus];
     //Serial.println(s);
     int deviceStatus = doc[config.deviceStatus];
-    //Serial.println(deviceStatus);
     updateMap(newPin, deviceStatus);
   }
 }
