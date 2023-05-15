@@ -200,4 +200,4 @@ void callback()
  
 # ThingsLinker Documentation
 
-  ### ThingsLinker [Official Website](https://blog.thingslinker.com/how-its-work/)
+  ### ThingsLinker [Official Website](https://thingslinker.com/how-its-work/)
