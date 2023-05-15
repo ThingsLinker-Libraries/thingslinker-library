@@ -34,7 +34,7 @@
   * Update your auth token in the sketch and upload it to your Arduino device
 
 # Usage
-### Example: [here](https://github.com/ThingsLinker-Libraries/thingslinker-library/tree/dev-test/examples)
+### Example: [here](https://github.com/ThingsLinker-Libraries/thingslinker-library/tree/main/examples)
 #### To use the ThingsLinker library in your sketch, include the following line at the top:
 
 ```cpp
