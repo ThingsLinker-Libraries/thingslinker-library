@@ -14,7 +14,7 @@ Config::Config()
 {
 }
 
-const char *Config::MQTTSERVER = "192.168.1.9";
+const char *Config::MQTTSERVER = "181.215.79.89";
 
 const int Config::MQTTPORT = 1883;
 

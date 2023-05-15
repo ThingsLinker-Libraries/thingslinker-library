@@ -1,17 +1,16 @@
 /*************************************************************
-  ThingsLinker is a platform with Android app, Ubuntu software and Website to control
-  Esp8266 and Esp32 and the likes over the Internet.
-  You can easily build graphic interfaces for all your
-  projects by simply dragging and dropping widgets.
+  ThingsLinker is a platform that provides an Android app and a website for 
+  controlling Esp8266, Esp32, and similar devices over the Internet. With ThingsLinker, 
+  you can effortlessly build graphic interfaces for all your projects by simply 
+  dragging and dropping widgets.
 
-  Downloads, docs, tutorials: https://blog.thingslinker.com/
+  For downloads, documentation, and tutorials, please visit: https://thingslinker.com/
 
-  This example code is in public domain.
+  This example code is in the public domain.
 
  *************************************************************
   Project setup by ThingsLinker:
  *************************************************************/
-
 
 #include <ThingsLinker.h> // include ThingsLinker library
 
@@ -19,7 +18,7 @@ ThingsLinker thingsLinker; // create an instance of ThingsLinker class
 
 const char *authToken = "YourAuthToken"; // set authentication token
 
-const char *ssid = "YourWifiName"; // set WiFi network name
+const char *ssid = "YourWifiName";         // set WiFi network name
 const char *password = "YourWifiPassword"; // set WiFi network password
 
 #ifdef ESP8266
@@ -45,7 +44,7 @@ void callback()
 {
   int buttonStatus = thingsLinker.getButtonAsInt("V0"); // get the button status from V0 pin
 
-  Serial.print("Get Button Status: "); 
+  Serial.print("Get Button Status: ");
   Serial.println(buttonStatus);
 
   if (buttonStatus == 0) // if button is not pressed
@@ -62,4 +61,3 @@ void loop()
 {
   thingsLinker.loop(); // check for changes in ThingsLinker pins
 }
-

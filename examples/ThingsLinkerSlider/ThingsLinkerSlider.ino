@@ -1,12 +1,12 @@
 /*************************************************************
-  ThingsLinker is a platform with Android app, Ubuntu software and Website to control
-  Esp8266 and Esp32 and the likes over the Internet.
-  You can easily build graphic interfaces for all your
-  projects by simply dragging and dropping widgets.
+  ThingsLinker is a platform that provides an Android app and a website for 
+  controlling Esp8266, Esp32, and similar devices over the Internet. With ThingsLinker, 
+  you can effortlessly build graphic interfaces for all your projects by simply 
+  dragging and dropping widgets.
 
-  Downloads, docs, tutorials: https://blog.thingslinker.com/
+  For downloads, documentation, and tutorials, please visit: https://thingslinker.com/
 
-  This example code is in public domain.
+  This example code is in the public domain.
 
  *************************************************************
   Project setup by ThingsLinker:
