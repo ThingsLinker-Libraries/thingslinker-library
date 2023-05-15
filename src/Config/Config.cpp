@@ -165,3 +165,4 @@ int Config::countPadding(String base64Encoded) {
   
   return paddingCount;
 }
+
