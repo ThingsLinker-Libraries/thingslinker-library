@@ -202,7 +202,7 @@ void callback()
 
   ### ThingsLinker [Official Website](https://thingslinker.com)
 
-<br>
+
 
 # License
 <p>This project is released under The MIT License (MIT)</p>
