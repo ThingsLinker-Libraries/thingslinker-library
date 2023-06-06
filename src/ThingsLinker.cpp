@@ -354,3 +354,20 @@ void ThingsLinker::publishMQTTMessage(const String &pin, float sensorValue)
   delay(200);
 #endif
 }
+
+void ThingsLinker::event(const String &eventCode)
+{
+  DynamicJsonDocument doc(1024);
+  doc[config.eventCode] = eventCode;
+  String jsonString;
+  serializeJson(doc, jsonString);
+  String encoded = config.base64_encode(jsonString);
+  Serial.println("Encoded string: " + mqttEncodedPayload);
+  String topic = String(config.TOPIC) + String(authToken) + "/event";
+  client.publish(topic.c_str(), encoded.c_str(), true);
+#if defined(ESP8266)
+  delay(200); 
+#elif defined(ESP32)
+  delay(200);
+#endif
+}

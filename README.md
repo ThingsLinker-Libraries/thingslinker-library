@@ -104,6 +104,12 @@ void loop()
   thingsLinker.loop();
 }
 ```
+### To trigger an event in ThingsLinker, use the `thingsLinker.event("YourEventKey");` function in your C++ code by providing the specific "Event Key" obtained from the ThingsLinker app. 
+
+```
+thingsLinker.event("YourEventKey");
+```
+
 # ThingsLinker Widgets Examples
 
 <h3>ThingsLinker offers various widgets that you can use to display or publish data. Here are some examples:</h3>

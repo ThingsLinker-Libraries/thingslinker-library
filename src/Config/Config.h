@@ -29,6 +29,7 @@ public:
     static const char *TOPIC;
     static const char *devicePin;
     static const char *deviceStatus;
+    static const char *eventCode;
     String getESP32ChipId();
     String getESP8266ChipId();
     String base64_encode(String str);

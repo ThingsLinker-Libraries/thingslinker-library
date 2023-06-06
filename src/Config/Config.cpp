@@ -24,6 +24,8 @@ const char *Config::devicePin = "devicePin";
 
 const char *Config::deviceStatus = "deviceStatus";
 
+const char *Config::eventCode = "eventCode";
+
 const char base64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 

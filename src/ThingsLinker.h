@@ -58,6 +58,8 @@ public:
 
   static void updateMap(const String &pin, int sensorValue);
 
+  void event(const String &eventCode);
+
 private:
   const char *ssid{nullptr};
   const char *pass{nullptr};
