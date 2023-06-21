@@ -26,6 +26,10 @@ const char *Config::deviceStatus = "deviceStatus";
 
 const char *Config::eventCode = "eventCode";
 
+const char *Config::event = "/event";
+
+const char *Config::charts = "charts/";
+
 const char base64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 

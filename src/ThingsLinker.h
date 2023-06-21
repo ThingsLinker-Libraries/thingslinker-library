@@ -42,7 +42,7 @@ public:
   void loop();
 
   int getDeviceStatus(const String &pin);
-  void publishMQTTMessage(const String &pin, float sensorValue);
+  void publishMQTTMessage(const String &pin, float sensorValue,int deviceTypeData);
 
   int getButtonAsInt(const String &pin);
 
@@ -55,6 +55,8 @@ public:
   void setGauge(const String &pin, float sensorValue);
 
   void setDisplay(const String &pin, float sensorValue);
+
+  void setChart(const String &pin, float sensorValue);
 
   static void updateMap(const String &pin, int sensorValue);
 

@@ -84,7 +84,7 @@ void ThingsLinker::connectToMQTT(const char *authToken)
 #elif defined(ESP8266)
     mqttCllent = String(authToken) + "_ESP6266_" + String(config.getESP8266ChipId());
 #endif
-    //Serial.println(mqttCllent);
+    // Serial.println(mqttCllent);
     statusTopic = String(config.TOPIC) + String(authToken) + "/status";
     if (client.connect(mqttCllent.c_str(), statusTopic.c_str(), 2, true, "OFFLINE"))
     {
@@ -134,8 +134,8 @@ void ThingsLinker::loop()
       String secondString = myPinStrings[i];
       String dynamicTopic = String(config.TOPIC) + String(authToken) + "/" + secondString;
       client.subscribe(dynamicTopic.c_str());
-      //Serial.println(secondString);
-      //Serial.println("Subscribed to topic: " + dynamicTopic);
+      // Serial.println(secondString);
+      // Serial.println("Subscribed to topic: " + dynamicTopic);
     }
   }
   client.loop();
@@ -156,8 +156,8 @@ void ThingsLinker::callbackMqtt(char *topic, byte *payload, unsigned int length)
     message += (char)payload[i];
   }
   mqttEncodedPayload = message;
-  //Serial.println(statusTopic);
-  //Serial.println(topic);
+  // Serial.println(statusTopic);
+  // Serial.println(topic);
   if (statusTopic == String(topic))
   {
     Serial.println("Status string: " + mqttEncodedPayload);
@@ -165,9 +165,9 @@ void ThingsLinker::callbackMqtt(char *topic, byte *payload, unsigned int length)
   else
   {
     // String encoded = config.base64_encode(mqttEncodedPayload);
-    //Serial.println("Encoded string: " + mqttEncodedPayload);
+    // Serial.println("Encoded string: " + mqttEncodedPayload);
     String decoded = config.base64Decode(mqttEncodedPayload);
-    //Serial.println("Decoded string: " + decoded);
+    // Serial.println("Decoded string: " + decoded);
 
     DynamicJsonDocument doc(256);
     DeserializationError error = deserializeJson(doc, decoded);
@@ -179,7 +179,7 @@ void ThingsLinker::callbackMqtt(char *topic, byte *payload, unsigned int length)
     }
     String newPin = doc[config.devicePin];
     String s = doc[config.deviceStatus];
-    //Serial.println(s);
+    // Serial.println(s);
     int deviceStatus = doc[config.deviceStatus];
     updateMap(newPin, deviceStatus);
   }
@@ -329,45 +329,49 @@ int ThingsLinker::getTimerAsInt(const String &pin)
 
 void ThingsLinker::setGauge(const String &pin, float sensorValue)
 {
-  ThingsLinker::publishMQTTMessage(pin, sensorValue);
+  ThingsLinker::publishMQTTMessage(pin, sensorValue, 1);
 }
 
 void ThingsLinker::setDisplay(const String &pin, float sensorValue)
 {
-  ThingsLinker::publishMQTTMessage(pin, sensorValue);
+  ThingsLinker::publishMQTTMessage(pin, sensorValue, 1);
 }
 
-void ThingsLinker::publishMQTTMessage(const String &pin, float sensorValue)
+void ThingsLinker::setChart(const String &pin, float sensorValue)
+{
+  ThingsLinker::publishMQTTMessage(pin, sensorValue, 0);
+}
+
+void ThingsLinker::event(const String &eventCode)
+{
+  ThingsLinker::publishMQTTMessage(eventCode, 0, 2);
+}
+
+void ThingsLinker::publishMQTTMessage(const String &pin, float sensorValue, int deviceTypeData)
 {
   DynamicJsonDocument doc(1024);
-  doc[config.devicePin] = pin;
-  doc[config.deviceStatus] = sensorValue;
+  if (deviceTypeData == 2)
+  {
+    doc[config.eventCode] = pin;
+  }
+  else
+  {
+    doc[config.devicePin] = pin;
+    doc[config.deviceStatus] = sensorValue;
+  }
   String jsonString;
   serializeJson(doc, jsonString);
   String encoded = config.base64_encode(jsonString);
   // Serial.println("Encoded string: " + mqttEncodedPayload);
   String topic = String(config.TOPIC) + String(authToken) + "/" + pin;
-  client.publish(topic.c_str(), encoded.c_str(), true);
-#if defined(ESP8266)
+  if (deviceTypeData == 0)
+  {
+    topic = String(config.TOPIC) + String(config.charts) + String(authToken) + "/" + pin;
+  }
+  else if (deviceTypeData == 2) 
+  {
+    topic = String(config.TOPIC) + String(authToken) + String(config.event);
+  }
+  client.publish(topic.c_str(), encoded.c_str());
   delay(200);
-#elif defined(ESP32)
-  delay(200);
-#endif
-}
-
-void ThingsLinker::event(const String &eventCode)
-{
-  DynamicJsonDocument doc(1024);
-  doc[config.eventCode] = eventCode;
-  String jsonString;
-  serializeJson(doc, jsonString);
-  String encoded = config.base64_encode(jsonString);
-  Serial.println("Encoded string: " + mqttEncodedPayload);
-  String topic = String(config.TOPIC) + String(authToken) + "/event";
-  client.publish(topic.c_str(), encoded.c_str(), true);
-#if defined(ESP8266)
-  delay(200); 
-#elif defined(ESP32)
-  delay(200);
-#endif
 }

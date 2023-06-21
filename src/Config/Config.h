@@ -30,6 +30,8 @@ public:
     static const char *devicePin;
     static const char *deviceStatus;
     static const char *eventCode;
+    static const char *event;
+    static const char *charts;
     String getESP32ChipId();
     String getESP8266ChipId();
     String base64_encode(String str);
