@@ -35,7 +35,7 @@ void setup()
 
 void loop()
 {
-  thingsLinker.run(authToken);  // Check for incoming data from subscribed pins and perform other background tasks
+  thingsLinker.loop(); // check for changes in ThingsLinker pins
 
   float y = random(1, 401) / 100.0;  // Generate a random float between 1 and 4, with two decimal places
   Serial.print("Value: ");  // Print message to serial monitor
