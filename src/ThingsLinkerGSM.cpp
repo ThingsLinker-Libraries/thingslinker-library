@@ -35,6 +35,8 @@ ThingsLinkerGSM::ThingsLinkerGSM(HardwareSerial& serial,
     _networkOk(false),
     _sigQuality(99),
     _lastCheck(0),
+    _mqttConnectedAt(0),
+    _lastStoredSend(0),
     _floatCount(0),
     _boolCount(0),
     _rgbCount(0),
@@ -155,6 +157,9 @@ void ThingsLinkerGSM::run() {
     _lastCheck = now;
     _checkConnections();
   }
+
+  // Readings stored while offline go out one at a time once connected
+  _sendStoredReadings();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -482,6 +487,10 @@ bool ThingsLinkerGSM::_connectMQTT() {
 
   // Mark connected BEFORE publish/subscribe (both check _mqttOk)
   _mqttOk = true;
+  _mqttConnectedAt = millis();
+  if (tlOfflineCount() > 0) {
+    TL_LOGF("[Offline] Sending %u stored readings...\n", (unsigned)tlOfflineCount());
+  }
 
   // Publish ONLINE status (retain, QoS 1)
   {
@@ -857,22 +866,75 @@ String ThingsLinkerGSM::_buildTopic(const char* widgetType, const char* pin) {
          + _blueprintId + "/" + _authToken + "/" + pin + "/";
 }
 
-void ThingsLinkerGSM::_publish(const char* widgetType, const char* pin, const TLValue& value) {
-  String topic = _buildTopic(widgetType, pin);
+/** True once the network has set the clock, i.e. _getTimestamp() is real time. */
+static bool clockIsSet() {
+  return time(nullptr) > (time_t)NTP_VALID_EPOCH;
+}
 
+/**
+ * Send one reading now, or keep it for later when offline storage is on.
+ * While stored readings are still waiting, a new one joins the end of the
+ * queue, so everything arrives in the order it was taken.
+ *
+ * @return true when the reading was sent now
+ */
+bool ThingsLinkerGSM::_sendOrStore(const char* widgetType, const char* pin, const char* payload) {
+  if (_mqttOk && tlOfflineCount() == 0) {
+    String topic = _buildTopic(widgetType, pin);
+    if (_mqttPublishAT(topic.c_str(), payload)) return true;
+  }
+
+  if (tlOfflineEnabled()) {
+    tlOfflineStore(widgetType, pin, payload, clockIsSet());
+    TL_LOGF("[Offline] Stored %s (%u waiting)\n", pin, (unsigned)tlOfflineCount());
+  }
+  return false;
+}
+
+/** Send stored readings, oldest first, one per call. Called from run(). */
+void ThingsLinkerGSM::_sendStoredReadings() {
+  if (tlOfflineCount() == 0 || !_mqttOk) return;
+
+  unsigned long now = millis();
+  if (now - _lastStoredSend < TL_OFFLINE_SEND_INTERVAL_MS) return;
+
+  // Readings taken before the clock was set need it to get their real time.
+  // Give the network a moment after reconnecting; send anyway if it never comes.
+  if (tlOfflineFrontNeedsClock() && !clockIsSet() &&
+      now - _mqttConnectedAt < TL_OFFLINE_CLOCK_WAIT_MS) return;
+
+  char widgetType[20];
+  char pin[8];
+  char payload[TL_PAYLOAD_BUFFER_SIZE];
+  if (!tlOfflinePeek(widgetType, sizeof(widgetType), pin, sizeof(pin), payload, sizeof(payload),
+                     clockIsSet() ? (unsigned long)time(nullptr) : 0UL)) {
+    tlOfflinePop();   // unreadable record: drop it so the queue cannot stall
+    return;
+  }
+
+  _lastStoredSend = now;
+  String topic = _buildTopic(widgetType, pin);
+  if (!_mqttPublishAT(topic.c_str(), payload)) return;   // try again next time
+
+  tlOfflinePop();
+  if (tlOfflineCount() == 0) TL_LOG("[Offline] ✓ All stored readings sent");
+}
+
+void ThingsLinkerGSM::_publish(const char* widgetType, const char* pin, const TLValue& value) {
   char payload[TL_PAYLOAD_BUFFER_SIZE];
   if (tlEncodePayload(value, _getTimestamp(), payload, sizeof(payload)) == 0) {
     TL_LOGF("[MQTT] ✗ Value too long (%s) — not sent\n", pin);
     return;
   }
 
-  bool ok = _mqttPublishAT(topic.c_str(), payload);
-  TL_LOGF("[MQTT] %s %s = %s\n", ok ? "✓" : "✗", pin, value.toString().c_str());
+  bool ok = _sendOrStore(widgetType, pin, payload);
+  // A stored reading is reported by _sendOrStore()
+  if (ok || !tlOfflineEnabled()) {
+    TL_LOGF("[MQTT] %s %s = %s\n", ok ? "✓" : "✗", pin, value.toString().c_str());
+  }
 }
 
 void ThingsLinkerGSM::_publishMap(const char* pin, float lat, float lng) {
-  String topic = _buildTopic("Map", pin);
-
   JsonDocument doc;
   doc["v"]   = lat;
   doc["lat"] = lat;
@@ -882,7 +944,7 @@ void ThingsLinkerGSM::_publishMap(const char* pin, float lat, float lng) {
   char payload[96];
   serializeJson(doc, payload, sizeof(payload));
 
-  _mqttPublishAT(topic.c_str(), payload);
+  _sendOrStore("Map", pin, payload);
 }
 
 void ThingsLinkerGSM::_subscribe(const char* widgetType, const char* pin) {
@@ -906,6 +968,11 @@ void ThingsLinkerGSM::send    (const char* p, const TLValue& v) { _publish("Valu
 // (onTerminal) does not receive it back. Apps match Terminal output by pin.
 void ThingsLinkerGSM::terminal(const char* p, const TLValue& v) { _publish("Value Display", p, v); }
 void ThingsLinkerGSM::map    (const char* p, float lat, float lng) { _publishMap(p, lat, lng); }
+void ThingsLinkerGSM::status     (const char* p, const TLValue& v) { _publish("Status",       p, v); }
+void ThingsLinkerGSM::progress   (const char* p, float v)          { _publish("Progress Bar", p, v); }
+void ThingsLinkerGSM::selector   (const char* p, const TLValue& v) { _publish("Selector",     p, v); }
+void ThingsLinkerGSM::numberInput(const char* p, float v)          { _publish("Number Input", p, v); }
+void ThingsLinkerGSM::publish(const char* widgetType, const char* p, const TLValue& v) { _publish(widgetType, p, v); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Subscribe helpers
@@ -971,15 +1038,32 @@ void ThingsLinkerGSM::onRGB(const char* pin,
 }
 
 void ThingsLinkerGSM::onTerminal(const char* pin, void (*cb)(const char*)) {
+  onWidgetText("Terminal", pin, cb);
+}
+
+void ThingsLinkerGSM::onWidget(const char* widgetType, const char* pin, void (*cb)(float)) {
+  if (_floatCount >= MAX_SUBSCRIPTIONS) { TL_LOG("[MQTT] Subscription limit reached"); return; }
+  _fillFloatCb(_floatCbs, _floatCount, pin, widgetType, cb);
+  _subscribe(widgetType, pin);
+}
+
+void ThingsLinkerGSM::onWidgetText(const char* widgetType, const char* pin, void (*cb)(const char*)) {
   if (_textCount >= MAX_SUBSCRIPTIONS) { TL_LOG("[MQTT] Subscription limit reached"); return; }
   TextCb& t = _textCbs[_textCount++];
   strncpy(t.pin,        pin,        sizeof(t.pin)        - 1);
-  strncpy(t.widgetType, "Terminal", sizeof(t.widgetType) - 1);
+  strncpy(t.widgetType, widgetType, sizeof(t.widgetType) - 1);
   t.pin[sizeof(t.pin) - 1]               = '\0';
   t.widgetType[sizeof(t.widgetType) - 1] = '\0';
   t.fn = cb;
-  _subscribe("Terminal", pin);
+  _subscribe(widgetType, pin);
 }
+
+void ThingsLinkerGSM::onSelector    (const char* pin, void (*cb)(float))       { onWidget("Selector",         pin, cb); }
+void ThingsLinkerGSM::onSelectorText(const char* pin, void (*cb)(const char*)) { onWidgetText("Selector",     pin, cb); }
+void ThingsLinkerGSM::onNumberInput (const char* pin, void (*cb)(float))       { onWidget("Number Input",     pin, cb); }
+void ThingsLinkerGSM::onTextInput   (const char* pin, void (*cb)(const char*)) { onWidgetText("Text Input",   pin, cb); }
+void ThingsLinkerGSM::onKeypad      (const char* pin, void (*cb)(float))       { onWidget("Keypad",           pin, cb); }
+void ThingsLinkerGSM::onKeypadText  (const char* pin, void (*cb)(const char*)) { onWidgetText("Keypad",       pin, cb); }
 
 void ThingsLinkerGSM::onTimer(const char* pin, void (*cb)(float)) {
   if (_floatCount >= MAX_SUBSCRIPTIONS) { TL_LOG("[MQTT] Subscription limit reached"); return; }
@@ -1125,6 +1209,12 @@ OTAResult ThingsLinkerGSM::checkOTA(const char* apiServer) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Debug
 // ─────────────────────────────────────────────────────────────────────────────
+void ThingsLinkerGSM::offlineStorage(bool enable, uint16_t maxRecords) {
+  tlOfflineEnable(enable, maxRecords);
+  TL_LOGF("[Offline] Storage %s\n", enable ? "on" : "off");
+}
+uint16_t ThingsLinkerGSM::offlineCount() { return tlOfflineCount(); }
+
 void ThingsLinkerGSM::debug(bool enable) {
   _tlDebugEnabled = enable;
 }

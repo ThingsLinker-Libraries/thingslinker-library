@@ -6,6 +6,7 @@
 #include "TL_MQTT.h"
 #include "TL_Config.h"
 #include "TL_Codec.h"
+#include "TL_Offline.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
@@ -109,6 +110,70 @@ static unsigned long getTimestamp() {
  */
 static String buildTopic(const char* widgetType, const char* pin) {
   return String("device/") + widgetType + "/" + _blueprintId + "/" + _authToken + "/" + pin + "/";
+}
+
+/** True once NTP has set the clock, i.e. getTimestamp() is real time. */
+static bool clockIsSet() {
+  return time(nullptr) > (time_t)NTP_VALID_EPOCH;
+}
+
+static unsigned long _connectedAt   = 0;   // millis() of the last successful connect
+static unsigned long _lastStoredSend = 0;  // millis() a stored reading was last sent
+
+/**
+ * Send one reading now, or keep it for later when offline storage is on.
+ *
+ * While stored readings are still waiting, a new one joins the end of the
+ * queue instead of overtaking them, so everything arrives in the order it
+ * was taken.
+ *
+ * @return true when the reading was sent or stored
+ */
+static bool sendOrStore(const char* widgetType, const char* pin, const char* payload) {
+  bool connected = _mqtt.connected();
+
+  if (connected && tlOfflineCount() == 0) {
+    String topic = buildTopic(widgetType, pin);
+    if (_mqtt.publish(topic.c_str(), payload, false)) return true;
+  }
+
+  if (tlOfflineEnabled()) {
+    tlOfflineStore(widgetType, pin, payload, clockIsSet());
+    TL_LOG("[Offline] Stored " + String(pin) + " (" + String(tlOfflineCount()) + " waiting)");
+    return true;
+  }
+
+  if (connected) TL_LOG("[MQTT] ✗ Publish failed (" + String(pin) + ")");
+  return false;
+}
+
+/** Send stored readings, oldest first, a little at a time. Called from loopMQTT(). */
+static void sendStoredReadings() {
+  if (tlOfflineCount() == 0 || !_mqtt.connected()) return;
+
+  unsigned long now = millis();
+  if (now - _lastStoredSend < TL_OFFLINE_SEND_INTERVAL_MS) return;
+
+  // Readings taken before the clock was set need it to get their real time.
+  // Give NTP a moment after reconnecting; send anyway if it never arrives.
+  if (tlOfflineFrontNeedsClock() && !clockIsSet() &&
+      now - _connectedAt < TL_OFFLINE_CLOCK_WAIT_MS) return;
+
+  char widgetType[20];
+  char pin[8];
+  char payload[TL_PAYLOAD_BUFFER_SIZE];
+  if (!tlOfflinePeek(widgetType, sizeof(widgetType), pin, sizeof(pin), payload, sizeof(payload),
+                     clockIsSet() ? (unsigned long)time(nullptr) : 0UL)) {
+    tlOfflinePop();   // unreadable record: drop it so the queue cannot stall
+    return;
+  }
+
+  _lastStoredSend = now;
+  String topic = buildTopic(widgetType, pin);
+  if (!_mqtt.publish(topic.c_str(), payload, false)) return;   // try again next time
+
+  tlOfflinePop();
+  if (tlOfflineCount() == 0) TL_LOG("[Offline] ✓ All stored readings sent");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,6 +330,10 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
   }
 
   TL_LOG("[MQTT] ✓ Connected!");
+  _connectedAt = millis();
+  if (tlOfflineCount() > 0) {
+    TL_LOG("[Offline] Sending " + String(tlOfflineCount()) + " stored readings...");
+  }
 
   // Publish ONLINE status immediately (retained so dashboard sees it instantly)
   _mqtt.publish(statusTopic.c_str(), "ONLINE", true);
@@ -406,9 +475,9 @@ void subscribeJoystickMQTT(const char* pin, void (*callback)(float x, float y)) 
 }
 
 void publishMQTT(const char* widgetType, const char* pin, const TLValue& value) {
-  if (!_mqtt.connected()) return;  // Reconnection handled by checkConnections()
-
-  String topic = buildTopic(widgetType, pin);
+  // Offline with storage switched off: the reading is dropped, as before.
+  // Reconnection is handled by checkConnections().
+  if (!_mqtt.connected() && !tlOfflineEnabled()) return;
 
   // Build standard ThingsLinker payload: {"v": <typed value>, "t": <unix_timestamp>}
   char payload[TL_PAYLOAD_BUFFER_SIZE];
@@ -417,15 +486,14 @@ void publishMQTT(const char* widgetType, const char* pin, const TLValue& value) 
     return;
   }
 
-  bool ok = _mqtt.publish(topic.c_str(), payload, false);
-  TL_LOG(ok ? "[MQTT] ✓ " + String(pin) + " = " + value.toString()
-            : "[MQTT] ✗ Publish failed (" + String(pin) + ")");
+  bool waiting = !_mqtt.connected() || tlOfflineCount() > 0;
+  if (sendOrStore(widgetType, pin, payload) && !waiting && tlOfflineCount() == 0) {
+    TL_LOG("[MQTT] ✓ " + String(pin) + " = " + value.toString());
+  }
 }
 
 void publishMQTTMap(const char* pin, float lat, float lng) {
-  if (!_mqtt.connected()) return;
-
-  String topic = buildTopic("Map", pin);
+  if (!_mqtt.connected() && !tlOfflineEnabled()) return;
 
   // App parseLoc() looks for "lat" and "lng" fields in the payload object.
   // Include "v" as well (= latitude) to stay compatible with the standard payload schema.
@@ -438,14 +506,16 @@ void publishMQTTMap(const char* pin, float lat, float lng) {
   char payload[96];
   serializeJson(doc, payload, sizeof(payload));
 
-  bool ok = _mqtt.publish(topic.c_str(), payload, false);
-  TL_LOG(ok ? "[MQTT] ✓ Map " + String(pin) + " lat=" + String(lat) + " lng=" + String(lng)
-            : "[MQTT] ✗ Map publish failed (" + String(pin) + ")");
+  bool waiting = !_mqtt.connected() || tlOfflineCount() > 0;
+  if (sendOrStore("Map", pin, payload) && !waiting && tlOfflineCount() == 0) {
+    TL_LOG("[MQTT] ✓ Map " + String(pin) + " lat=" + String(lat) + " lng=" + String(lng));
+  }
 }
 
 void loopMQTT() {
   if (_mqtt.connected()) {
     _mqtt.loop();
+    sendStoredReadings();
   }
   // Note: reconnection is handled externally by ThingsLinker::checkConnections()
 }

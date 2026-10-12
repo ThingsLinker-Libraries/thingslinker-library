@@ -82,7 +82,11 @@ void onDimmerChange(float percent) {
   // Slider range is 0–100 from the app
   int duty = (int)(percent * 2.55f);   // scale to 0–255
   duty = constrain(duty, 0, 255);
-  ledcWrite(PWM_CHANNEL, duty);
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWrite(PWM_PIN, duty);       // ESP32 core 3.x addresses PWM by pin
+#else
+  ledcWrite(PWM_CHANNEL, duty);   // ESP32 core 2.x addresses PWM by channel
+#endif
   Serial.printf("[Slider] Dimmer: %.0f%%  duty: %d\n", percent, duty);
 }
 
@@ -116,8 +120,12 @@ void setup() {
   // Configure output pins
   pinMode(LED_PIN,   OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
-  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcAttach(PWM_PIN, PWM_FREQUENCY, PWM_RESOLUTION);       // ESP32 core 3.x
+#else
+  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);    // ESP32 core 2.x
   ledcAttachPin(PWM_PIN, PWM_CHANNEL);
+#endif
 
   // Register all callbacks before begin()
   iot.onSwitch  (PIN_SWITCH,   onSwitchChange);

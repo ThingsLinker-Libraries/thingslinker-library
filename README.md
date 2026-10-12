@@ -11,7 +11,7 @@
 
 # ThingsLinker — Arduino Library for ESP32
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/Thingslinker-Organization/ThingsLinker-Arduino-Library)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/Thingslinker-Organization/ThingsLinker-Arduino-Library)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-ESP32-orange.svg)](https://www.espressif.com/en/products/socs/esp32)
 
@@ -38,6 +38,7 @@ Both use the **exact same widget API** — `gauge()`, `onSwitch()`, `run()` etc.
   - [Widget Examples (GSM)](#widget-examples-gsm)
   - [GPS Tracker](#gps-tracker)
 - [OTA Firmware Updates](#ota-firmware-updates)
+- [Offline Storage](#offline-storage)
 - [Storage API](#storage-api)
 - [Quick Reference](#quick-reference)
 - [Troubleshooting](#troubleshooting)
@@ -231,6 +232,99 @@ iot.led("V1", alarm);                 // → LED widget turns red/green
 
 ---
 
+#### Status — Show a value as a named state
+
+The states (label, colour, icon and which values each one covers) are set up in the portal. The device only sends the raw value, as a number or as text.
+
+```cpp
+iot.status("V1", level);              // number → the state whose range covers it
+iot.status("V2", "ERR");              // text   → the state set to exactly "ERR"
+```
+
+---
+
+#### Progress Bar — Show a value as a filled bar
+
+```cpp
+iot.progress("V1", 63);               // the bar's min and max are set in the portal
+```
+
+---
+
+#### Selector — App picks one of several options
+
+Each option has a label the user sees and a value the device receives. Use `onSelector()` when the values are numbers and `onSelectorText()` when they are text.
+
+```cpp
+void setup() {
+  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+
+  iot.onSelector("V1", [](float option) {          // options with values 0, 1, 2
+    Serial.printf("Mode: %d\n", (int)option);
+  });
+
+  iot.onSelectorText("V2", [](const char* option) { // options with values "eco", "max"
+    if (strcmp(option, "eco") == 0) Serial.println("Eco mode");
+  });
+}
+
+// When the device changes the option by itself, show it in the app:
+iot.selector("V1", 2);
+```
+
+---
+
+#### Number Input — App sends an exact number
+
+```cpp
+iot.onNumberInput("V1", [](float setpoint) {   // typed, or stepped with − and +
+  Serial.printf("Set point: %.1f\n", setpoint);
+});
+
+iot.numberInput("V1", 21.5f);                  // show the device's own value in the app
+```
+
+---
+
+#### Text Input — App sends a line of text
+
+```cpp
+iot.onTextInput("V1", [](const char* text) {
+  Serial.printf("Received: %s\n", text);       // copy the text if you need it later
+});
+```
+
+---
+
+#### Keypad — App sends a command per button
+
+Each button sends its own value on every press, including the same button twice in a row. Use `onKeypad()` when the values are numbers and `onKeypadText()` when they are text.
+
+```cpp
+iot.onKeypadText("V1", [](const char* key) {
+  if      (strcmp(key, "start") == 0) Serial.println("Start");
+  else if (strcmp(key, "stop")  == 0) Serial.println("Stop");
+});
+```
+
+Each press is delivered once and is not repeated when the device reconnects.
+
+---
+
+#### Widgets that need no device code
+
+These widgets are built in the dashboard from the pins your device already uses. Add them in the portal; there is nothing to write in the sketch.
+
+| Widget | What it shows |
+|--------|---------------|
+| Computed Value | A number worked out from other pins, e.g. `V0 * V1` |
+| Multi Chart | Several pins on one chart |
+| Event Log | A running list of the values received on chosen pins |
+| Table | Every widget's current value in one list |
+| Text | A heading or a note |
+
+---
+
 ## GSM Variant — ThingsLinkerGSM
 
 Use this when your device needs to work **without WiFi** — on the road, in the field, or anywhere with a 4G signal.
@@ -404,6 +498,43 @@ void loop() {
 
 ---
 
+#### Status, Selector, Number Input, Keypad over 4G
+
+The newer widgets use the same functions as the WiFi class. Register the callbacks before `begin()`.
+
+```cpp
+void setup() {
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);
+
+  iot.onSelector("V1", [](float option) {
+    Serial.printf("Mode: %d\n", (int)option);
+  });
+  iot.onNumberInput("V2", [](float setpoint) {
+    Serial.printf("Set point: %.1f\n", setpoint);
+  });
+  iot.onKeypadText("V3", [](const char* key) {
+    Serial.printf("Key: %s\n", key);
+  });
+
+  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY", "airtelgprs.com", MODEM_PWR_PIN);
+}
+
+void loop() {
+  iot.run();
+
+  static unsigned long last = 0;
+  if (millis() - last >= 15000) {
+    last = millis();
+    iot.status  ("V4", level);     // Status widget — value shown as a named state
+    iot.progress("V5", level);     // Progress Bar widget
+  }
+}
+```
+
+See `16_GSM_Dashboard_Widgets` for the complete sketch.
+
+---
+
 #### Check connection status
 
 ```cpp
@@ -512,6 +643,93 @@ void loop() {
 
 ---
 
+## Offline Storage
+
+Keep readings while WiFi or mobile data is unavailable, and send them when the connection is back. One line switches it on or off, in both the WiFi and the GSM variant:
+
+```cpp
+iot.offlineStorage(true);    // keep readings while offline
+iot.offlineStorage(false);   // default: readings taken offline are dropped
+```
+
+Nothing else changes in the sketch. Publish as usual:
+
+```cpp
+#include <ThingsLinker.h>   // or <ThingsLinkerGSM.h>
+
+ThingsLinker iot("YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_ID");
+
+void setup() {
+  Serial.begin(115200);
+  iot.offlineStorage(true);
+  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+}
+
+void loop() {
+  iot.run();
+
+  static unsigned long last = 0;
+  if (millis() - last >= 5000) {
+    last = millis();
+    iot.chart("V1", readSensor());   // online: sent now — offline: stored, sent later
+  }
+}
+```
+
+### How it works
+
+![How offline storage works: online, connection lost, connection back](extras/offline-storage.svg)
+
+| Stage | What the library does | `iot.offlineCount()` |
+|-------|-----------------------|----------------------|
+| **1. Online** | Sends each reading to the server straight away. The store is not used. | `0` |
+| **2. Connection lost** | Keeps each reading in the device's memory, together with the time it was taken. Nothing is lost while the store has room. | goes up: `1`, `2`, `3`… |
+| **3. Connection back** | Sends the stored readings, oldest first, about 20 a second. Each one is removed from the store as soon as it has been sent. Readings taken during this time wait behind the stored ones, so everything arrives in order. | goes down to `0` |
+| **Back to 1** | When the last stored reading has been sent the store is empty and its memory is freed. New readings go straight to the server again. | `0` |
+
+You do not have to do anything for stages 2 and 3. They happen inside `iot.run()`.
+
+**Each reading keeps the time it was taken**, so the dashboard shows it at the right place in the chart and in the history, not at the moment it finally arrived. A reading taken before the device ever knew the time (for example, it was switched on with no connection) gets its time worked out once the clock is set.
+
+**If the connection drops again while stored readings are being sent**, the ones already sent are gone from the store and are not sent twice; the rest stay and go out after the next reconnect.
+
+### What you see in the Serial Monitor
+
+```
+[Offline] Storage on — up to 200 readings
+[MQTT] ✓ V1 = 24.10                      ← online: sent straight away
+[Check] WiFi lost — reconnecting...
+[Offline] Stored V1 (1 waiting)          ← offline: kept
+[Offline] Stored V1 (2 waiting)
+[Offline] Stored V1 (3 waiting)
+[MQTT] ✓ Connected!
+[Offline] Sending 3 stored readings...   ← back online: sending what was kept
+[Offline] ✓ All stored readings sent     ← store is empty again
+[MQTT] ✓ V1 = 25.30                      ← back to normal
+```
+
+This is typical output on WiFi; other lines appear in between, and the GSM variant words a few of them slightly differently. The arrows are explanations added here and are not printed.
+
+### Functions
+
+| Function | Description |
+|----------|-------------|
+| `iot.offlineStorage(true)` | Switch on, keeping up to 200 readings |
+| `iot.offlineStorage(true, 500)` | Switch on, keeping up to 500 readings |
+| `iot.offlineStorage(false)` | Switch off and discard anything still waiting |
+| `iot.offlineCount()` | Number of readings waiting to be sent |
+
+### Limits to know about
+
+- **Readings are held in memory (RAM).** They survive a connection loss of any length, but are lost if the device restarts or loses power.
+- **When the store is full, the oldest reading is dropped** to make room for the newest. A reading uses about 100 bytes, so the default 200 readings need roughly 20 KB. If free memory runs low, the oldest readings are dropped early so the sketch keeps working.
+- **On WiFi, the first seconds of an outage can still be lost.** A reading sent just after the link drops, before the device has noticed, is not stored. The GSM variant confirms each reading with the server, so it does not have this gap.
+- **On GSM, every stored reading costs mobile data** when it is finally sent.
+
+See `17_Offline_Storage` (WiFi) and `18_GSM_Offline_Storage` (4G).
+
+---
+
 ## Storage API
 
 Persist values to ESP32 flash — survives power-off and reboot.
@@ -554,6 +772,11 @@ iot.clearAllData();          // delete all saved data
 | `iot.button("V1", true/false)` | Button | Button press state |
 | `iot.slider("V1", value)` | Slider | Slider position |
 | `iot.map("V1", lat, lng)` | Map | GPS location pin |
+| `iot.status("V1", value)` | Status | Number or text, shown as a named state |
+| `iot.progress("V1", value)` | Progress Bar | Number shown as a filled bar |
+| `iot.selector("V1", value)` | Selector | Which option is active now |
+| `iot.numberInput("V1", value)` | Number Input | The current number |
+| `iot.publish("Type", "V1", value)` | Any widget type, by its name in the portal | Number, boolean or text |
 
 ### Data types
 
@@ -565,7 +788,12 @@ Every widget has a data type, set in the portal under the widget's **Data Type**
 | Slider, Gauge, Chart | Integer, Float | `iot.gauge("V1", 23.5f)` |
 | Value Display, Label | Integer, Float, Boolean, String | `iot.display("V1", 42)` / `iot.label("V1", "Door open")` |
 | Terminal | String | `iot.terminal("V1", "Boot complete")` |
+| Status | Integer, Float, Boolean, String | `iot.status("V1", 82)` / `iot.status("V1", "ERR")` |
+| Progress Bar, Number Input | Integer, Float | `iot.progress("V1", 63)` |
+| Selector, Keypad | Integer, Float, String | `iot.selector("V1", 2)` / `iot.onKeypadText("V1", cb)` |
+| Text Input | String | `iot.onTextInput("V1", cb)` |
 | RGB, Timer, Map, Joystick | Structured | `iot.map("V1", lat, lng)` |
+| Text, Table, Multi Chart, Computed Value, Event Log | — | No device code |
 
 ```cpp
 iot.display("V3", 42);                         // Integer  → {"v":42}
@@ -588,9 +816,35 @@ Text values can be up to roughly 300 characters. Longer values are not sent and 
 | `iot.onSlider("V1", cb)` | Slider | `float value` |
 | `iot.onValue("V1", cb)` | Value Display | `float value` |
 | `iot.onTerminal("V1", cb)` | Terminal | `const char* text` |
+| `iot.onWidget("Selector", "V1", cb)` | Any widget type that sends a number | `float value` |
+| `iot.onWidgetText("Selector", "V1", cb)` | Any widget type that sends text | `const char* text` |
+| `iot.onSelector("V1", cb)` | Selector with number values | `float option` |
+| `iot.onSelectorText("V1", cb)` | Selector with text values | `const char* option` |
+| `iot.onNumberInput("V1", cb)` | Number Input | `float value` |
+| `iot.onTextInput("V1", cb)` | Text Input | `const char* text` |
+| `iot.onKeypad("V1", cb)` | Keypad with number values | `float key` |
+| `iot.onKeypadText("V1", cb)` | Keypad with text values | `const char* key` |
 | `iot.onRGB("V1", cb)` | RGB | `r, g, b, on, count, pattern` |
 | `iot.onTimer("V1", cb)` | Timer | `float seconds` |
 | `iot.onJoystick("V1", cb)` | Joystick | `float x, float y` |
+
+A `const char*` passed to a callback is only valid during the callback. Copy it if you need it later.
+
+Up to 20 callbacks of each kind (number, on/off, text) can be registered.
+
+### Settings come back on reconnect, actions do not
+
+The apps ask the server to keep the last command sent to a pin, so a device that was offline gets its settings back when it connects. Whether a command is kept depends on the widget:
+
+| Widget | On reconnect |
+|--------|--------------|
+| Switch, Button, LED, Slider, Selector, Number Input, RGB, Timer, Joystick | The last command is delivered again, so the device returns to the chosen setting |
+| Keypad, Text Input | Nothing is delivered. Each press or line is sent once, so these suit one-off commands such as "start" or "restart" |
+| Terminal | The last line typed is delivered again. Do not trigger one-off actions directly from `onTerminal()` |
+
+### The device hears its own messages
+
+When the device publishes to a pin it also listens to with the same widget type (for example `iot.selector("V1", 2)` together with `iot.onSelector("V1", cb)`), its own message comes back and the callback runs with that value. This is harmless as long as the callback does not publish to the same pin again, so never call `iot.selector()` from inside `onSelector()`, `iot.numberInput()` from inside `onNumberInput()`, and so on.
 
 ### Status functions
 
@@ -629,6 +883,8 @@ Open via **File → Examples → ThingsLinker** in Arduino IDE:
 | `09_Clear_WiFi` | Erase WiFi credentials and re-provision |
 | `10_Full_Feature_Test` | Full publish + subscribe with reconnect |
 | `11_OTA_TestFirmware` | OTA v2.0 test firmware (used as the new `.bin`) |
+| `15_Dashboard_Widgets` | Status, Progress Bar, Selector, Number Input, Text Input, Keypad |
+| `17_Offline_Storage` | Keep readings while WiFi is down and send them later |
 
 ### GSM Examples
 | Example | Description |
@@ -636,6 +892,8 @@ Open via **File → Examples → ThingsLinker** in Arduino IDE:
 | `12_GSM_Connection` | Basic 4G connection + temperature publish + Switch |
 | `13_GSM_Full_Example` | All widgets — Gauge, Chart, Switch, Slider, RGB, Joystick, OTA |
 | `14_GSM_GPS_Tracker` | Live GPS tracking with built-in GNSS — Map, speed, altitude |
+| `16_GSM_Dashboard_Widgets` | Status, Progress Bar, Selector, Number Input, Text Input, Keypad over 4G |
+| `18_GSM_Offline_Storage` | Keep readings while there is no mobile signal and send them later |
 
 ---
 

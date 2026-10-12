@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" width="960" height="520" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">How offline storage works</title>
+  <desc id="d">Three stages. Online: readings go straight to the server and the store is empty. Connection lost: readings are kept in the device's memory. Connection back: stored readings are sent oldest first, each is removed once sent, then new readings go straight to the server again.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1f2937"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9ca3af"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="520" rx="14" fill="#ffffff"/>
+  <rect x="0.5" y="0.5" width="959" height="519" rx="14" fill="none" stroke="#d1d5db"/>
+
+  <!-- column backgrounds -->
+  <rect x="20"  y="20" width="296" height="480" rx="10" fill="#ecfdf5"/>
+  <rect x="332" y="20" width="296" height="480" rx="10" fill="#fef2f2"/>
+  <rect x="644" y="20" width="296" height="480" rx="10" fill="#eff6ff"/>
+
+  <!-- headings -->
+  <g font-weight="700" font-size="18" fill="#111827">
+    <text x="40"  y="54">1 · Online</text>
+    <text x="352" y="54">2 · Connection lost</text>
+    <text x="664" y="54">3 · Connection back</text>
+  </g>
+  <g font-size="13" fill="#4b5563">
+    <text x="40"  y="76">Readings go straight to the server</text>
+    <text x="352" y="76">Readings are kept on the device</text>
+    <text x="664" y="76">Stored readings are sent, then cleared</text>
+  </g>
+
+  <!-- ── Column 1 ─────────────────────────────────────────── -->
+  <g>
+    <rect x="68" y="100" width="200" height="56" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="168" y="124" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Your sketch</text>
+    <text x="168" y="144" text-anchor="middle" font-size="12.5" fill="#374151" font-family="ui-monospace, Menlo, Consolas, monospace">iot.chart("V1", value)</text>
+
+    <rect x="68" y="220" width="200" height="110" rx="8" fill="#f9fafb" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="6 5"/>
+    <text x="168" y="246" text-anchor="middle" font-size="14" font-weight="600" fill="#6b7280">Store (device memory)</text>
+    <text x="168" y="286" text-anchor="middle" font-size="14" fill="#6b7280">empty</text>
+    <text x="168" y="312" text-anchor="middle" font-size="12.5" fill="#6b7280" font-family="ui-monospace, Menlo, Consolas, monospace">offlineCount() = 0</text>
+
+    <rect x="68" y="404" width="200" height="56" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="168" y="428" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">ThingsLinker server</text>
+    <text x="168" y="447" text-anchor="middle" font-size="12.5" fill="#374151">dashboard updates live</text>
+
+    <!-- arrow bypassing the store -->
+    <path d="M 48 128 L 40 128 L 40 432 L 64 432" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#a)"/>
+    <path d="M 68 128 L 48 128" fill="none" stroke="#1f2937" stroke-width="2"/>
+    <text x="52" y="372" font-size="12.5" font-weight="600" fill="#065f46">sent straight away</text>
+  </g>
+
+  <!-- ── Column 2 ─────────────────────────────────────────── -->
+  <g>
+    <rect x="380" y="100" width="200" height="56" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="480" y="124" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Your sketch</text>
+    <text x="480" y="144" text-anchor="middle" font-size="12.5" fill="#374151" font-family="ui-monospace, Menlo, Consolas, monospace">iot.chart("V1", value)</text>
+
+    <path d="M 480 156 L 480 214" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#a)"/>
+    <text x="490" y="190" font-size="12.5" font-weight="600" fill="#991b1b">kept, not lost</text>
+
+    <rect x="380" y="220" width="200" height="130" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="480" y="244" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Store (device memory)</text>
+    <g font-size="12.5" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#111827">
+      <rect x="396" y="256" width="168" height="22" rx="4" fill="#fde68a"/>
+      <text x="406" y="272">10:00  24.1   oldest</text>
+      <rect x="396" y="282" width="168" height="22" rx="4" fill="#fde68a"/>
+      <text x="406" y="298">10:05  24.6</text>
+      <rect x="396" y="308" width="168" height="22" rx="4" fill="#fde68a"/>
+      <text x="406" y="324">10:10  25.0   newest</text>
+    </g>
+
+    <rect x="380" y="404" width="200" height="56" rx="8" fill="#f9fafb" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="6 5"/>
+    <text x="480" y="428" text-anchor="middle" font-size="14" font-weight="600" fill="#6b7280">ThingsLinker server</text>
+    <text x="480" y="447" text-anchor="middle" font-size="12.5" fill="#6b7280">nothing arrives</text>
+
+    <!-- broken link -->
+    <path d="M 480 350 L 480 398" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="5 5"/>
+    <g stroke="#dc2626" stroke-width="3" stroke-linecap="round">
+      <path d="M 470 366 L 490 386"/>
+      <path d="M 490 366 L 470 386"/>
+    </g>
+    <text x="500" y="381" font-size="12.5" font-weight="600" fill="#991b1b">no WiFi / no signal</text>
+  </g>
+
+  <!-- ── Column 3 ─────────────────────────────────────────── -->
+  <g>
+    <rect x="692" y="100" width="200" height="56" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="792" y="124" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Your sketch</text>
+    <text x="792" y="144" text-anchor="middle" font-size="12.5" fill="#374151" font-family="ui-monospace, Menlo, Consolas, monospace">iot.chart("V1", value)</text>
+
+    <path d="M 792 156 L 792 214" fill="none" stroke="#9ca3af" stroke-width="2" marker-end="url(#g)"/>
+    <text x="802" y="182" font-size="12" fill="#4b5563">new readings wait</text>
+    <text x="802" y="198" font-size="12" fill="#4b5563">behind the stored ones</text>
+
+    <rect x="692" y="220" width="200" height="130" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="792" y="244" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Store (device memory)</text>
+    <g font-size="12.5" font-family="ui-monospace, Menlo, Consolas, monospace">
+      <rect x="708" y="256" width="168" height="22" rx="4" fill="#f3f4f6" stroke="#d1d5db"/>
+      <text x="718" y="272" fill="#9ca3af" text-decoration="line-through">10:00  24.1</text>
+      <text x="820" y="272" fill="#065f46" font-weight="700">sent ✓</text>
+      <rect x="708" y="282" width="168" height="22" rx="4" fill="#f3f4f6" stroke="#d1d5db"/>
+      <text x="718" y="298" fill="#9ca3af" text-decoration="line-through">10:05  24.6</text>
+      <text x="820" y="298" fill="#065f46" font-weight="700">sent ✓</text>
+      <rect x="708" y="308" width="168" height="22" rx="4" fill="#fde68a"/>
+      <text x="718" y="324" fill="#111827">10:10  25.0   next</text>
+    </g>
+
+    <path d="M 792 350 L 792 398" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#a)"/>
+    <text x="802" y="371" font-size="12.5" font-weight="600" fill="#1e40af">oldest first, each</text>
+    <text x="802" y="387" font-size="12.5" font-weight="600" fill="#1e40af">with its own time</text>
+
+    <rect x="692" y="404" width="200" height="56" rx="8" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="792" y="428" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">ThingsLinker server</text>
+    <text x="792" y="447" text-anchor="middle" font-size="12.5" fill="#374151">chart fills the gap</text>
+  </g>
+
+  <!-- footers -->
+  <g font-size="12.5" fill="#374151">
+    <text x="40"  y="486">Store stays empty.</text>
+    <text x="352" y="486">Full store: oldest reading is dropped.</text>
+    <text x="664" y="486">Store empty again → back to stage 1.</text>
+  </g>
+
+  <!-- stage arrows between columns -->
+  <g stroke="#1f2937" stroke-width="2" fill="none">
+    <path d="M 318 49 L 330 49" marker-end="url(#a)"/>
+    <path d="M 630 49 L 642 49" marker-end="url(#a)"/>
+  </g>
+</svg>

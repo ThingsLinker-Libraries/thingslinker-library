@@ -48,6 +48,31 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 #define TL_PAYLOAD_BUFFER_SIZE 384
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Offline storage (see TL_Offline.h)
+// ─────────────────────────────────────────────────────────────────────────────
+// How many readings are kept while offline unless the sketch asks for another
+// number: iot.offlineStorage(true, 500). A typical reading uses about 100
+// bytes of RAM, so 200 readings need roughly 20 KB.
+#ifndef TL_OFFLINE_DEFAULT_RECORDS
+  #define TL_OFFLINE_DEFAULT_RECORDS 200
+#endif
+// Storing stops making the store bigger when free memory falls below this
+// (bytes); the oldest readings are dropped instead, so the sketch keeps working.
+#ifndef TL_OFFLINE_MIN_FREE_HEAP
+  #define TL_OFFLINE_MIN_FREE_HEAP 20000
+#endif
+// Pause between stored readings when sending them after a reconnect (ms).
+// Keeps a long backlog from flooding the server or starving the sketch.
+#ifndef TL_OFFLINE_SEND_INTERVAL_MS
+  #define TL_OFFLINE_SEND_INTERVAL_MS 50
+#endif
+// After reconnecting, how long to wait for the clock (NTP / network time)
+// before sending readings that were taken while the clock was not set (ms).
+#ifndef TL_OFFLINE_CLOCK_WAIT_MS
+  #define TL_OFFLINE_CLOCK_WAIT_MS 15000
+#endif
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Subscriptions
 // ─────────────────────────────────────────────────────────────────────────────
 // Maximum number of widget pins the library will hold callbacks for.

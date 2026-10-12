@@ -33,6 +33,11 @@ led	KEYWORD2
 button	KEYWORD2
 slider	KEYWORD2
 map	KEYWORD2
+status	KEYWORD2
+progress	KEYWORD2
+selector	KEYWORD2
+numberInput	KEYWORD2
+publish	KEYWORD2
 
 #######################################
 # Methods — Subscribe (App → Device)
@@ -47,6 +52,14 @@ onLED	KEYWORD2
 onTimer	KEYWORD2
 onJoystick	KEYWORD2
 onTerminal	KEYWORD2
+onWidget	KEYWORD2
+onWidgetText	KEYWORD2
+onSelector	KEYWORD2
+onSelectorText	KEYWORD2
+onNumberInput	KEYWORD2
+onTextInput	KEYWORD2
+onKeypad	KEYWORD2
+onKeypadText	KEYWORD2
 
 #######################################
 # Methods — Status
@@ -65,6 +78,8 @@ getChipID	KEYWORD2
 #######################################
 
 resetWiFi	KEYWORD2
+offlineStorage	KEYWORD2
+offlineCount	KEYWORD2
 debug	KEYWORD2
 setBLEName	KEYWORD2
 

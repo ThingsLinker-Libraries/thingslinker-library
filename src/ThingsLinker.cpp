@@ -156,6 +156,11 @@ void ThingsLinker::send    (const char* pin, const TLValue& v) { publishMQTT("Va
 // Published on the display channel so the device's own Terminal subscription
 // (onTerminal) does not receive it back. Apps match Terminal output by pin.
 void ThingsLinker::terminal(const char* pin, const TLValue& v) { publishMQTT("Value Display", pin, v); }
+void ThingsLinker::status     (const char* pin, const TLValue& v) { publishMQTT("Status",       pin, v); }
+void ThingsLinker::progress   (const char* pin, float v)          { publishMQTT("Progress Bar", pin, v); }
+void ThingsLinker::selector   (const char* pin, const TLValue& v) { publishMQTT("Selector",     pin, v); }
+void ThingsLinker::numberInput(const char* pin, float v)          { publishMQTT("Number Input", pin, v); }
+void ThingsLinker::publish(const char* widgetType, const char* pin, const TLValue& v) { publishMQTT(widgetType, pin, v); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Widget subscribe
@@ -166,6 +171,14 @@ void ThingsLinker::onSwitch(const char* pin, void (*cb)(bool))  { subscribeMQTTB
 void ThingsLinker::onSlider  (const char* pin, void (*cb)(float))                                   { subscribeMQTT("Slider",        pin, cb); }
 void ThingsLinker::onValue   (const char* pin, void (*cb)(float))                                   { subscribeMQTT("Value Display", pin, cb); }
 void ThingsLinker::onTerminal(const char* pin, void (*cb)(const char*))                             { subscribeMQTTText("Terminal",  pin, cb); }
+void ThingsLinker::onWidget    (const char* widgetType, const char* pin, void (*cb)(float))       { subscribeMQTT(widgetType,     pin, cb); }
+void ThingsLinker::onWidgetText(const char* widgetType, const char* pin, void (*cb)(const char*)) { subscribeMQTTText(widgetType, pin, cb); }
+void ThingsLinker::onSelector    (const char* pin, void (*cb)(float))       { subscribeMQTT("Selector",         pin, cb); }
+void ThingsLinker::onSelectorText(const char* pin, void (*cb)(const char*)) { subscribeMQTTText("Selector",     pin, cb); }
+void ThingsLinker::onNumberInput (const char* pin, void (*cb)(float))       { subscribeMQTT("Number Input",     pin, cb); }
+void ThingsLinker::onTextInput   (const char* pin, void (*cb)(const char*)) { subscribeMQTTText("Text Input",   pin, cb); }
+void ThingsLinker::onKeypad      (const char* pin, void (*cb)(float))       { subscribeMQTT("Keypad",           pin, cb); }
+void ThingsLinker::onKeypadText  (const char* pin, void (*cb)(const char*)) { subscribeMQTTText("Keypad",       pin, cb); }
 void ThingsLinker::onRGB     (const char* pin, void (*cb)(uint8_t r, uint8_t g, uint8_t b, bool on, uint16_t count, const char* pattern)) { subscribeRGBMQTT(pin, cb); }
 void ThingsLinker::onTimer   (const char* pin, void (*cb)(float))                                   { subscribeMQTT("Timer",         pin, cb); }
 void ThingsLinker::onJoystick(const char* pin, void (*cb)(float x, float y))                        { subscribeJoystickMQTT(pin, cb);           }
@@ -193,6 +206,16 @@ bool   ThingsLinker::getBool   (const char* k, bool d)          { return ::getBo
 bool   ThingsLinker::hasKey    (const char* k)                  { return ::hasKey(k);       }
 bool   ThingsLinker::removeKey (const char* k)                  { return ::removeKey(k);    }
 void   ThingsLinker::clearAllData()                             { ::clearAllData();          }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Offline storage (delegate to TL_Offline)
+// ─────────────────────────────────────────────────────────────────────────────
+void ThingsLinker::offlineStorage(bool enable, uint16_t maxRecords) {
+  tlOfflineEnable(enable, maxRecords);
+  TL_LOG(enable ? "[Offline] Storage on — up to " + String(maxRecords) + " readings"
+                : String("[Offline] Storage off"));
+}
+uint16_t ThingsLinker::offlineCount() { return tlOfflineCount(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OTA

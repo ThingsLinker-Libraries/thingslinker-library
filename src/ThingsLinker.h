@@ -43,6 +43,7 @@
 #include "TL_MQTT.h"
 #include "TL_Storage.h"
 #include "TL_OTA.h"
+#include "TL_Offline.h"
 
 class ThingsLinker {
 public:
@@ -81,8 +82,14 @@ public:
   //   Button, Switch, LED        Boolean
   //   Slider, Gauge, Chart       Integer or Float
   //   Value Display, Label       Integer, Float, Boolean or String
-  //   Terminal                   String
+  //   Terminal, Text Input       String
+  //   Status                     Integer, Float, Boolean or String
+  //   Progress Bar, Number Input Integer or Float
+  //   Selector, Keypad           Integer, Float or String
   //   RGB, Timer, Map, Joystick  structured (dedicated methods)
+  //
+  // Text, Table, Multi Chart, Computed Value and Event Log widgets need no
+  // code on the device: they are built in the dashboard from the other pins.
   //
   // Methods taking a TLValue accept any of these directly — the data type is
   // taken from the argument type, e.g. 42 → Integer, 23.5f → Float,
@@ -151,6 +158,58 @@ public:
    */
   void send(const char* pin, const TLValue& value);
 
+  /**
+   * Publish a value to a Status widget.                     Pin: V0–V124
+   * The dashboard shows the state (label, colour, icon) whose rule covers the
+   * value. The states are set up in the portal, so the device only sends the
+   * raw value: a number for range rules, or a number / text for exact matches.
+   *
+   * Example:
+   *   iot.status("V7", 82);        // falls in whichever range covers 82
+   *   iot.status("V7", "ERR");     // matches a state set to exactly "ERR"
+   */
+  void status(const char* pin, const TLValue& value);
+
+  /**
+   * Publish a value to a Progress Bar widget.               Pin: V0–V124
+   * The bar's minimum and maximum are set in the portal.
+   *
+   * Example:
+   *   iot.progress("V8", 63);
+   */
+  void progress(const char* pin, float value);
+
+  /**
+   * Tell a Selector widget which option is active now.      Pin: V0–V124
+   * Send the option's value as it is set in the portal (a number or text).
+   * Use it when the device changes the option by itself, e.g. after a boot or
+   * a local button. See the note on onSelector() about echoes.
+   *
+   * Example:
+   *   iot.selector("V9", 2);
+   *   iot.selector("V9", "eco");
+   */
+  void selector(const char* pin, const TLValue& value);
+
+  /**
+   * Tell a Number Input widget the current number.          Pin: V0–V124
+   *
+   * Example:
+   *   iot.numberInput("V10", 21.5f);
+   */
+  void numberInput(const char* pin, float value);
+
+  /**
+   * Publish to ANY widget type by name. Use this for widget types that have
+   * no dedicated method, or types added to the platform later.
+   *
+   * @param widgetType Widget type exactly as named in the portal (case-sensitive)
+   *
+   * Example:
+   *   iot.publish("Progress Bar", "V8", 63);
+   */
+  void publish(const char* widgetType, const char* pin, const TLValue& value);
+
   // ── Subscribe (app → device) ────────────────────────────────────────────────
 
   /**
@@ -217,6 +276,108 @@ public:
   void onTerminal(const char* pin, void (*callback)(const char* text));
 
   /**
+   * Register a callback for ANY widget type that sends a number from the app.
+   * Use this for widget types without a dedicated on...() method, such as a
+   * Selector, or types added to the platform later.
+   *
+   * @param widgetType Widget type exactly as named in the portal (case-sensitive)
+   *
+   * Example:
+   *   iot.onWidget("Selector", "V8", [](float option) {
+   *     setMode((int)option);
+   *   });
+   */
+  void onWidget(const char* widgetType, const char* pin, void (*callback)(float));
+
+  /**
+   * Same as onWidget(), for widgets that send text (for example a Selector
+   * whose options have text values). The pointer is only valid during the
+   * callback — copy it to keep it.
+   *
+   * Example:
+   *   iot.onWidgetText("Selector", "V8", [](const char* option) {
+   *     if (strcmp(option, "eco") == 0) enterEcoMode();
+   *   });
+   */
+  void onWidgetText(const char* widgetType, const char* pin, void (*callback)(const char* text));
+
+  /**
+   * Register a callback for a Selector widget whose options have NUMBER
+   * values. Called with the value of the option picked in the app.
+   *
+   * The device hears its own messages on a pin it listens to, so calling
+   * selector() for the same pin runs this callback again with that value.
+   * Do not call selector() from inside the callback.
+   *
+   * Example:
+   *   iot.onSelector("V9", [](float option) {
+   *     setFanSpeed((int)option);
+   *   });
+   */
+  void onSelector(const char* pin, void (*callback)(float));
+
+  /**
+   * Same as onSelector(), for a Selector whose options have TEXT values.
+   * The pointer is only valid during the callback — copy it to keep it.
+   *
+   * Example:
+   *   iot.onSelectorText("V9", [](const char* option) {
+   *     if (strcmp(option, "eco") == 0) enterEcoMode();
+   *   });
+   */
+  void onSelectorText(const char* pin, void (*callback)(const char* text));
+
+  /**
+   * Register a callback for a Number Input widget: the number typed or
+   * stepped to in the app. The widget keeps it within its own min and max.
+   *
+   * Example:
+   *   iot.onNumberInput("V10", [](float setpoint) {
+   *     targetTemperature = setpoint;
+   *   });
+   */
+  void onNumberInput(const char* pin, void (*callback)(float));
+
+  /**
+   * Register a callback for a Text Input widget: the line of text typed in
+   * the app. The pointer is only valid during the callback — copy it to keep it.
+   *
+   * Each line is delivered once. It is not repeated when the device reconnects.
+   *
+   * Example:
+   *   iot.onTextInput("V11", [](const char* text) {
+   *     showOnDisplay(text);
+   *   });
+   */
+  void onTextInput(const char* pin, void (*callback)(const char* text));
+
+  /**
+   * Register a callback for a Keypad widget whose buttons have NUMBER values.
+   * Called with the value of the button pressed; pressing the same button
+   * again calls it again.
+   *
+   * Each press is delivered once. It is not repeated when the device
+   * reconnects, so a keypad suits one-off commands.
+   *
+   * Example:
+   *   iot.onKeypad("V12", [](float key) {
+   *     runPreset((int)key);
+   *   });
+   */
+  void onKeypad(const char* pin, void (*callback)(float));
+
+  /**
+   * Same as onKeypad(), for a Keypad whose buttons have TEXT values.
+   * The pointer is only valid during the callback — copy it to keep it.
+   *
+   * Example:
+   *   iot.onKeypadText("V12", [](const char* key) {
+   *     if (strcmp(key, "stop") == 0) stopMotor();
+   *   });
+   */
+  void onKeypadText(const char* pin, void (*callback)(const char* text));
+
+  /**
    * Register a callback for RGB widget color changes from the app.
    * Receives individual r, g, b channels (0–255), on/off state,
    * LED count (number of pixels set in the app, 1–300), and
@@ -262,6 +423,34 @@ public:
   bool   bleActive();       ///< true if BLE provisioning is running
   String getIP();           ///< Current WiFi IP address
   String getChipID();       ///< ESP32 MAC-derived chip identifier
+
+  // ── Offline storage ─────────────────────────────────────────────────────────
+
+  /**
+   * Keep readings while there is no connection, and send them when it is back.
+   *
+   *   iot.offlineStorage(true);    // keep readings while offline
+   *   iot.offlineStorage(false);   // default: readings taken offline are dropped
+   *
+   * With it on, every value the sketch publishes while WiFi is down (or
+   * the server cannot be reached) is stored instead of lost. After the device
+   * reconnects, the stored readings are sent first, oldest first, each with
+   * the time it was taken, so charts and history show them where they belong.
+   *
+   * Readings are held in memory: they survive a connection loss of any
+   * length, but not a restart or a power cut. When the store is full the
+   * oldest reading is dropped to make room for the newest.
+   *
+   * Can be called before or after begin(). Switching it off discards whatever
+   * is still waiting.
+   *
+   * @param enable      true to store readings while offline
+   * @param maxRecords  how many readings to keep (default 200, about 20 KB of RAM)
+   */
+  void offlineStorage(bool enable, uint16_t maxRecords = TL_OFFLINE_DEFAULT_RECORDS);
+
+  /** Number of stored readings still waiting to be sent. */
+  uint16_t offlineCount();
 
   // ── Persistent storage ──────────────────────────────────────────────────────
   // Key strings max 15 characters (ESP32 NVS limit).

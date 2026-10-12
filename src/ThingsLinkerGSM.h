@@ -48,6 +48,7 @@
 #include "TL_Value.h"
 #include "TL_Storage.h"
 #include "TL_OTA.h"
+#include "TL_Offline.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal URC receive state machine
@@ -146,6 +147,27 @@ public:
   /** Generic publish — maps to Value Display widget.        Pin: V0–V124 */
   void send(const char* pin, const TLValue& value);
 
+  // The widgets below work exactly as in the WiFi class; ThingsLinker.h has
+  // the full notes and examples for each.
+
+  /** Publish a value to a Status widget (number or text).   Pin: V0–V124 */
+  void status(const char* pin, const TLValue& value);
+
+  /** Publish a value to a Progress Bar widget.              Pin: V0–V124 */
+  void progress(const char* pin, float value);
+
+  /** Tell a Selector widget which option is active now.     Pin: V0–V124 */
+  void selector(const char* pin, const TLValue& value);
+
+  /** Tell a Number Input widget the current number.         Pin: V0–V124 */
+  void numberInput(const char* pin, float value);
+
+  /**
+   * Publish to ANY widget type by name (as named in the portal, case-sensitive).
+   *   iot.publish("Progress Bar", "V8", 63);
+   */
+  void publish(const char* widgetType, const char* pin, const TLValue& value);
+
   // ── Subscribe (app → device) ────────────────────────────────────────────────
 
   /** Register a callback for Button presses from the app. */
@@ -177,6 +199,33 @@ public:
    * The pointer is only valid during the callback — copy it to keep it.
    */
   void onTerminal(const char* pin, void (*callback)(const char* text));
+
+  /**
+   * Register a callback for ANY widget type that sends a number from the app
+   * (for example "Selector"). widgetType is the name shown in the portal.
+   */
+  void onWidget(const char* widgetType, const char* pin, void (*callback)(float));
+
+  /** Same as onWidget(), for widgets that send text. */
+  void onWidgetText(const char* widgetType, const char* pin, void (*callback)(const char* text));
+
+  /** Selector whose options have number values: the value of the option picked. */
+  void onSelector(const char* pin, void (*callback)(float));
+
+  /** Selector whose options have text values. */
+  void onSelectorText(const char* pin, void (*callback)(const char* text));
+
+  /** Number Input: the number typed or stepped to in the app. */
+  void onNumberInput(const char* pin, void (*callback)(float));
+
+  /** Text Input: the line of text typed in the app. */
+  void onTextInput(const char* pin, void (*callback)(const char* text));
+
+  /** Keypad whose buttons have number values: the value of the button pressed. */
+  void onKeypad(const char* pin, void (*callback)(float));
+
+  /** Keypad whose buttons have text values. */
+  void onKeypadText(const char* pin, void (*callback)(const char* text));
 
   /** Register a callback for Timer widget values from the app. */
   void onTimer(const char* pin, void (*callback)(float));
@@ -220,6 +269,34 @@ public:
   float gpsLng();       ///< Longitude in decimal degrees (negative = West)
   float gpsSpeed();     ///< Ground speed in km/h
   float gpsAltitude();  ///< Altitude above sea level in metres
+
+  // ── Offline storage ─────────────────────────────────────────────────────────
+
+  /**
+   * Keep readings while there is no connection, and send them when it is back.
+   *
+   *   iot.offlineStorage(true);    // keep readings while offline
+   *   iot.offlineStorage(false);   // default: readings taken offline are dropped
+   *
+   * With it on, every value the sketch publishes while mobile data is down (or
+   * the server cannot be reached) is stored instead of lost. After the device
+   * reconnects, the stored readings are sent first, oldest first, each with
+   * the time it was taken, so charts and history show them where they belong.
+   *
+   * Readings are held in memory: they survive a connection loss of any
+   * length, but not a restart or a power cut. When the store is full the
+   * oldest reading is dropped to make room for the newest.
+   *
+   * Can be called before or after begin(). Switching it off discards whatever
+   * is still waiting.
+   *
+   * @param enable      true to store readings while offline
+   * @param maxRecords  how many readings to keep (default 200, about 20 KB of RAM)
+   */
+  void offlineStorage(bool enable, uint16_t maxRecords = TL_OFFLINE_DEFAULT_RECORDS);
+
+  /** Number of stored readings still waiting to be sent. */
+  uint16_t offlineCount();
 
   // ── OTA firmware updates ────────────────────────────────────────────────────
 
@@ -272,6 +349,8 @@ private:
   int           _sigQuality;
   String        _ipAddress;
   unsigned long _lastCheck;
+  unsigned long _mqttConnectedAt;   // millis() of the last successful MQTT connect
+  unsigned long _lastStoredSend;    // millis() a stored reading was last sent
 
   // ── Callback tables ─────────────────────────────────────────────────────────
   FloatCb _floatCbs[MAX_SUBSCRIPTIONS];
@@ -339,6 +418,8 @@ private:
   String        _buildTopic(const char* widgetType, const char* pin);
   void          _publish(const char* widgetType, const char* pin, const TLValue& value);
   void          _publishMap(const char* pin, float lat, float lng);
+  bool          _sendOrStore(const char* widgetType, const char* pin, const char* payload);
+  void          _sendStoredReadings();
   void          _subscribe(const char* widgetType, const char* pin);
   unsigned long _getTimestamp();
 };
