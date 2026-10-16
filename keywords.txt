@@ -79,6 +79,7 @@ getChipID	KEYWORD2
 
 resetWiFi	KEYWORD2
 offlineStorage	KEYWORD2
+setPowerKeyActiveLow	KEYWORD2
 offlineCount	KEYWORD2
 debug	KEYWORD2
 setBLEName	KEYWORD2

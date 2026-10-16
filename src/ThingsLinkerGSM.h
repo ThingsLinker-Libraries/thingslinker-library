@@ -302,6 +302,23 @@ public:
 
   OTAResult checkOTA(const char* apiServer = TL_API_SERVER);
 
+  // ── Advanced ────────────────────────────────────────────────────────────────
+
+  /**
+   * Tell the library how the modem's power key is wired. Call before begin().
+   *
+   *   false (default)  the pin drives a transistor: pin HIGH presses the key
+   *   true             the pin is wired straight to PWRKEY: pin LOW presses it
+   *
+   * Either way the key is only pressed when the modem is not answering, so a
+   * modem that is already on is never switched off by a restart of the ESP32.
+   *
+   * Example:
+   *   iot.setPowerKeyActiveLow(true);
+   *   iot.begin(CLIENT_KEY, SECRET_KEY, APN, 7);
+   */
+  void setPowerKeyActiveLow(bool activeLow);
+
   // ── Debug ───────────────────────────────────────────────────────────────────
 
   void debug(bool enable);
@@ -343,6 +360,7 @@ private:
   const char*   _gprsUser;
   const char*   _gprsPass;
   int           _pwrPin;
+  bool          _pwrKeyActiveLow;   // PWRKEY wired directly: pressed by pulling low
   bool          _initialized;
   bool          _mqttOk;
   bool          _networkOk;
@@ -351,6 +369,7 @@ private:
   unsigned long _lastCheck;
   unsigned long _mqttConnectedAt;   // millis() of the last successful MQTT connect
   unsigned long _lastStoredSend;    // millis() a stored reading was last sent
+  unsigned long _statusSentAt;      // millis() ONLINE was last published
 
   // ── Callback tables ─────────────────────────────────────────────────────────
   FloatCb _floatCbs[MAX_SUBSCRIPTIONS];
@@ -380,6 +399,16 @@ private:
   int         _rxTopicExpected;
   int         _rxPayloadExpected;
 
+  // Messages that arrive while an AT command is running (for example the
+  // retained values the broker sends straight after a subscribe) are kept
+  // here and handed to the callbacks from run(), never in the middle of a
+  // command. When full, the oldest is dropped.
+  static const int TL_GSM_RX_QUEUE = 6;
+  struct _GsmRxMsg { char topic[256]; char payload[512]; };
+  _GsmRxMsg   _rxQueue[TL_GSM_RX_QUEUE];
+  int         _rxQueueHead;
+  int         _rxQueueCount;
+
   // ── AT command layer ─────────────────────────────────────────────────────────
   void    _sendAT(const char* cmd);
   bool    _waitOK(uint32_t timeoutMs = 3000);
@@ -400,11 +429,13 @@ private:
   bool    _connectMQTT();
   void    _subscribeAll();
   void    _syncTime();
+  bool    _clockFromModem();
   void    _checkConnections();
 
   // ── MQTT AT helpers ──────────────────────────────────────────────────────────
-  bool    _mqttPublishAT(const char* topic, const char* payload);
+  bool    _mqttPublishAT(const char* topic, const char* payload, bool retain = false);
   bool    _mqttSubscribeAT(const char* topic);
+  bool    _mqttSessionOpen();
 
   // ── GPS internals ────────────────────────────────────────────────────────────
   void    _updateGPS();
@@ -412,6 +443,8 @@ private:
 
   // ── URC / message handling ───────────────────────────────────────────────────
   void    _processLine(const char* line);
+  bool    _isMessageLine(const char* line);
+  void    _deliverQueued();
   void    _dispatchMessage(const char* topic, const char* payload);
 
   // ── Misc helpers ─────────────────────────────────────────────────────────────

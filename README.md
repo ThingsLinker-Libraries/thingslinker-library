@@ -918,6 +918,19 @@ Open via **File → Examples → ThingsLinker** in Arduino IDE:
 | MQTT connect error 3 | Socket connect failed — check SIM data plan is active |
 | Signal quality 99 | No signal — check antenna connection |
 
+**Modem does not start, or starts and stops** — check how the modem's power key is wired. If the ESP32 pin goes straight to the modem's PWRKEY (no transistor), the key is pressed by pulling the pin low; tell the library before `begin()`:
+
+```cpp
+iot.setPowerKeyActiveLow(true);
+iot.begin(CLIENT_KEY, SECRET_KEY, APN, MODEM_PWR_PIN);
+```
+
+The key is only pressed when the modem is not answering, so restarting the ESP32 never switches off a modem that is already running.
+
+**`[MQTT] Connect error 32` (secure handshake failed)** — some modem firmware (seen on an A7672G, firmware A110B04) cannot use a server certificate of the ECDSA kind. The MQTT server then needs an RSA certificate. WiFi devices, browsers and the mobile app work with either kind.
+
+**Readings show the wrong time** — the library sets its clock from an internet time server (UTC) right after the data connection comes up, and does not rely on the modem's own clock. If the Serial Monitor shows `Time server request ... failed`, the time server could not be reached over mobile data.
+
 ### GPS Issues
 | Symptom | Fix |
 |---------|-----|

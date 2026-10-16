@@ -24,23 +24,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Credentials — replace with your actual values from the Organisation Portal
 // ─────────────────────────────────────────────────────────────────────────────
-#define AUTH_TOKEN    "your_device_auth_token"
-#define BLUEPRINT_KEY "your_blueprint_key"
-#define CLIENT_KEY    "your_client_key"
-#define SECRET_KEY    "your_secret_key"
+#define AUTH_TOKEN    "9a1977dd443b7d1f0ff4cbdaa4cbf05e1376b786dcf1da344d06a0d8df46845f"
+#define BLUEPRINT_KEY "BLUEbV7N2u5diuUi"
+#define CLIENT_KEY    ""
+#define SECRET_KEY    ""
 
-#define APN           "airtelgprs.com"   // your SIM card APN
+#define APN           "internet"   // your SIM card APN
 #define APN_USER      ""
 #define APN_PASS      ""
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pin definitions
 // ─────────────────────────────────────────────────────────────────────────────
-#define MODEM_RX_PIN   16
-#define MODEM_TX_PIN   17
+#define MODEM_RX_PIN   17
+#define MODEM_TX_PIN   18
 
 // PWRKEY — set to TL_NO_PWRKEY if your board powers the modem automatically
-#define MODEM_PWR_PIN   4   // or: TL_NO_PWRKEY
+#define MODEM_PWR_PIN   7   // or: TL_NO_PWRKEY
 
 #define LED_PIN         2    // built-in LED
 #define RELAY_PIN      26    // relay / output

@@ -53,10 +53,10 @@
 #include <Adafruit_NeoPixel.h>   // Install: Arduino Library Manager → "Adafruit NeoPixel"
 
 // ── Credentials ──────────────────────────────────────────────
-const char* AUTH_TOKEN   = "YOUR_AUTH_TOKEN";
-const char* BLUEPRINT_ID = "YOUR_BLUEPRINT_ID";
-const char* CLIENT_KEY   = "YOUR_CLIENT_KEY";
-const char* SECRET_KEY   = "YOUR_SECRET_KEY";
+const char* AUTH_TOKEN   = "9a1977dd443b7d1f0ff4cbdaa4cbf05e1376b786dcf1da344d06a0d8df46845f";
+const char* BLUEPRINT_ID = "BLUEbV7N2u5diuUi";
+const char* CLIENT_KEY   = "";
+const char* SECRET_KEY   = "";
 
 // ── Hardware ─────────────────────────────────────────────────
 #define BUTTON_PIN     41   // Physical push button (Room Light1)

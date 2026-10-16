@@ -31,8 +31,13 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 // ThingsLinker production broker.
 // Port 8883 = TCP + TLS (used by ESP32 / Arduino devices).
 // Port 8084 = WebSocket + TLS (used by browser clients — handled server-side).
-#define MQTT_SERVER "mqtt.thingslinker.com"
-#define MQTT_PORT   8883
+// Both can be overridden with compiler flags (for a self-hosted or test broker).
+#ifndef MQTT_SERVER
+  #define MQTT_SERVER "mqtt.thingslinker.com"
+#endif
+#ifndef MQTT_PORT
+  #define MQTT_PORT   8883
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MQTT tuning
@@ -70,6 +75,13 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 // before sending readings that were taken while the clock was not set (ms).
 #ifndef TL_OFFLINE_CLOCK_WAIT_MS
   #define TL_OFFLINE_CLOCK_WAIT_MS 15000
+#endif
+
+// How often a connected device publishes its retained ONLINE again (ms).
+// A broker may delete retained messages after a while (ours does after about
+// a day); repeating it keeps dashboards opened later showing the device online.
+#ifndef TL_STATUS_REFRESH_MS
+  #define TL_STATUS_REFRESH_MS (6UL * 60UL * 60UL * 1000UL)
 #endif
 
 // ─────────────────────────────────────────────────────────────────────────────
