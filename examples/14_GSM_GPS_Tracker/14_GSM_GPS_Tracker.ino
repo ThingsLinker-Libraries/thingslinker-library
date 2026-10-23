@@ -29,8 +29,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #define AUTH_TOKEN    "your_device_auth_token"
 #define BLUEPRINT_KEY "your_blueprint_key"
-#define CLIENT_KEY    "your_client_key"
-#define SECRET_KEY    "your_secret_key"
 
 #define APN           "airtelgprs.com"   // your SIM card APN
 #define APN_USER      ""
@@ -53,7 +51,10 @@ void setup() {
   Serial2.begin(115200, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
 
   // Connect to ThingsLinker via 4G
-  iot.begin(CLIENT_KEY, SECRET_KEY, APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, put the username and password first:
+  //   iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  iot.begin(APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
 
   // Start the built-in GPS engine
   iot.startGPS();

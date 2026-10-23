@@ -55,8 +55,6 @@
 // ── Credentials ──────────────────────────────────────────────
 const char* AUTH_TOKEN   = "YOUR_AUTH_TOKEN";
 const char* BLUEPRINT_ID = "YOUR_BLUEPRINT_ID";
-const char* CLIENT_KEY   = "YOUR_CLIENT_KEY";
-const char* SECRET_KEY   = "YOUR_SECRET_KEY";
 
 // ── Hardware ─────────────────────────────────────────────────
 #define BOOT_PIN  0   // BOOT button — hold >3 s to reset WiFi
@@ -183,7 +181,9 @@ void setup() {
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
 
-  iot.begin(CLIENT_KEY, SECRET_KEY);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // Settings survive a reboot
   mode     = iot.getInt  ("mode",     0);

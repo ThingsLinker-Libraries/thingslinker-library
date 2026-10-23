@@ -41,6 +41,7 @@ Both use the **exact same widget API** — `gauge()`, `onSwitch()`, `run()` etc.
 - [Offline Storage](#offline-storage)
 - [Storage API](#storage-api)
 - [Quick Reference](#quick-reference)
+- [MQTT login (optional)](#mqtt-login-optional)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -57,7 +58,8 @@ Both use the **exact same widget API** — `gauge()`, `onSwitch()`, `run()` etc.
 `Blueprints → [Blueprint] → Devices → [Device]`
 - **Auth Token** — long hex string
 - **Blueprint Key** — starts with `BLUE`
-- **Client Key** and **Secret Key**
+
+No MQTT username or password is needed: the ThingsLinker broker accepts devices without a login. (They are optional, for a broker of your own that asks for one; see [MQTT login](#mqtt-login-optional).)
 
 **Step 3 — Upload:**
 
@@ -68,7 +70,7 @@ ThingsLinker iot("YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_KEY");
 
 void setup() {
   Serial.begin(115200);
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  iot.begin();
 }
 
 void loop() {
@@ -92,7 +94,7 @@ ThingsLinker iot("YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_KEY");
 
 void setup() {
   Serial.begin(115200);
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  iot.begin();
 }
 
 void loop() {
@@ -141,7 +143,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(RELAY_PIN, OUTPUT);
 
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  iot.begin();
 
   iot.onSwitch("V1", [](bool on) {          // Switch widget on V1
     digitalWrite(RELAY_PIN, on ? HIGH : LOW);
@@ -257,7 +259,7 @@ Each option has a label the user sees and a value the device receives. Use `onSe
 
 ```cpp
 void setup() {
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  iot.begin();
 
   iot.onSelector("V1", [](float option) {          // options with values 0, 1, 2
     Serial.printf("Mode: %d\n", (int)option);
@@ -364,8 +366,7 @@ void setup() {
   Serial.begin(115200);
   Serial2.begin(115200, SERIAL_8N1, 16, 17);    // RX=16, TX=17
 
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY",
-            "airtelgprs.com",   // your SIM card APN
+  iot.begin("airtelgprs.com",   // your SIM card APN
             MODEM_PWR_PIN);     // pass pin number OR TL_NO_PWRKEY
 }
 
@@ -409,7 +410,7 @@ ThingsLinkerGSM iot(Serial2, "YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_KEY");
 void setup() {
   Serial.begin(115200);
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY", "airtelgprs.com", 4);
+  iot.begin("airtelgprs.com", 4);
 }
 
 void loop() {
@@ -443,7 +444,7 @@ void setup() {
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
   pinMode(RELAY_PIN, OUTPUT);
 
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY", "airtelgprs.com", 4);
+  iot.begin("airtelgprs.com", 4);
 
   iot.onSwitch("V1", [](bool on) {              // Switch widget on V1
     digitalWrite(RELAY_PIN, on ? HIGH : LOW);
@@ -472,7 +473,7 @@ void setup() {
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
   pinMode(RELAY_PIN, OUTPUT);
 
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY", "airtelgprs.com", 4);
+  iot.begin("airtelgprs.com", 4);
 
   iot.onSwitch("V3", [](bool on) {
     digitalWrite(RELAY_PIN, on ? HIGH : LOW);
@@ -516,7 +517,7 @@ void setup() {
     Serial.printf("Key: %s\n", key);
   });
 
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY", "airtelgprs.com", MODEM_PWR_PIN);
+  iot.begin("airtelgprs.com", MODEM_PWR_PIN);
 }
 
 void loop() {
@@ -565,7 +566,7 @@ void setup() {
   Serial.begin(115200);
   Serial2.begin(115200, SERIAL_8N1, 16, 17);
 
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY", "airtelgprs.com", 4);
+  iot.begin("airtelgprs.com", 4);
 
   iot.startGPS();   // start the built-in GNSS engine
 }
@@ -639,7 +640,7 @@ void loop() {
 2. **Set shipment → Live** — devices will detect it on next `checkOTA()`
 3. Monitor progress in **OTA → Shipments**
 
-> **Important:** Compile with **Tools → Partition Scheme → Default with OTA**. Use the same partition scheme for every firmware version on a device.
+> **Important:** Compile with **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)**. "Default with OTA" (1.3MB per app) is slightly too small for a WiFi sketch with OTA. Use the same partition scheme for every firmware version on a device.
 
 ---
 
@@ -662,7 +663,7 @@ ThingsLinker iot("YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_ID");
 void setup() {
   Serial.begin(115200);
   iot.offlineStorage(true);
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  iot.begin();
 }
 
 void loop() {
@@ -842,9 +843,9 @@ The apps ask the server to keep the last command sent to a pin, so a device that
 | Keypad, Text Input | Nothing is delivered. Each press or line is sent once, so these suit one-off commands such as "start" or "restart" |
 | Terminal | The last line typed is delivered again. Do not trigger one-off actions directly from `onTerminal()` |
 
-### The device hears its own messages
+### The device ignores its own messages
 
-When the device publishes to a pin it also listens to with the same widget type (for example `iot.selector("V1", 2)` together with `iot.onSelector("V1", cb)`), its own message comes back and the callback runs with that value. This is harmless as long as the callback does not publish to the same pin again, so never call `iot.selector()` from inside `onSelector()`, `iot.numberInput()` from inside `onNumberInput()`, and so on.
+A device listens on the pins it publishes to, and MQTT delivers its own messages back to it. The library recognises these (same topic and payload, within a few seconds of sending) and ignores them, so a callback only runs for commands from the app or portal. You can, for example, call `iot.led("V5", state)` and handle `iot.onLED("V5", cb)` in the same sketch.
 
 ### Status functions
 
@@ -897,6 +898,24 @@ Open via **File → Examples → ThingsLinker** in Arduino IDE:
 
 ---
 
+## MQTT login (optional)
+
+The ThingsLinker broker does not need a username or password, so `iot.begin()` (WiFi) and `iot.begin(APN, pwrPin)` (GSM) are all you need.
+
+Only if you connect to a broker of your own that asks for a login, pass it first:
+
+```cpp
+// WiFi
+iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+
+// GSM (A7672)
+iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", "airtelgprs.com", MODEM_PWR_PIN);
+```
+
+If you have been given an MQTT **Client Key** and **Secret Key**, they are this login: the Client Key is the username and the Secret Key is the password.
+
+Leave both out (or pass `""`) to connect without a login. Sketches written for older versions, which passed a client key and secret key here, still compile and work unchanged.
+
 ## Troubleshooting
 
 ### WiFi Issues
@@ -904,7 +923,7 @@ Open via **File → Examples → ThingsLinker** in Arduino IDE:
 |---------|-----|
 | Device not visible in BLE scan | Restart ESP32; check no other BLE client is connected |
 | WiFi fails every boot | Confirm SSID is 2.4 GHz; call `iot.resetWiFi()` to re-provision |
-| MQTT auth failed (state -1) | Check client key and secret key from portal |
+| MQTT login refused (state 4 or 5) | Only happens with an MQTT username/password: the ThingsLinker broker needs none, so call `iot.begin()` without them |
 | MQTT connect failed (state -2) | Check internet access; confirm port 8883 is not blocked |
 
 ### GSM Issues
@@ -913,7 +932,7 @@ Open via **File → Examples → ThingsLinker** in Arduino IDE:
 | `Modem not responding` | Check RX/TX wiring, power supply (need 500 mA+), PWRKEY GPIO |
 | `Network registration failed` | Check SIM card is inserted; check antenna; check carrier coverage |
 | `GPRS activation failed` | Check APN string matches your SIM carrier |
-| MQTT connect error 30 | Bad Client Key / Secret Key — verify from portal |
+| MQTT connect error 30 | Login refused — call `iot.begin(APN, ...)` without an MQTT username/password |
 | MQTT connect error 32 | SSL handshake failed — check modem firmware version |
 | MQTT connect error 3 | Socket connect failed — check SIM data plan is active |
 | Signal quality 99 | No signal — check antenna connection |
@@ -922,7 +941,7 @@ Open via **File → Examples → ThingsLinker** in Arduino IDE:
 
 ```cpp
 iot.setPowerKeyActiveLow(true);
-iot.begin(CLIENT_KEY, SECRET_KEY, APN, MODEM_PWR_PIN);
+iot.begin(APN, MODEM_PWR_PIN);
 ```
 
 The key is only pressed when the modem is not answering, so restarting the ESP32 never switches off a modem that is already running.
@@ -943,7 +962,7 @@ The key is only pressed when the modem is not answering, so restarting the ESP32
 |---------|-----|
 | `OTA_ERROR` | Check server URL in `TL_Config.h`; confirm device has internet |
 | `OTA_FAILED` | Verify `.bin` is valid; confirm shipment is set to Live |
-| "No OTA partition found" | Re-flash via USB with **Tools → Partition Scheme → Default with OTA** |
+| "No OTA partition found" | Re-flash via USB with **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)** |
 | "Firmware too large" | Recompile new firmware with same partition scheme as base |
 
 ---

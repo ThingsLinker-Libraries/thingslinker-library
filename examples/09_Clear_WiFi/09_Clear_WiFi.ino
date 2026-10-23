@@ -39,7 +39,9 @@ void setup() {
   // resetWiFi() is called inside begin() when no credentials are found,
   // but calling it explicitly here forces a clean re-provisioning regardless
   // of whether credentials were previously saved.
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // Clear any existing WiFi credentials and restart BLE.
   // (If begin() already started BLE due to missing credentials,

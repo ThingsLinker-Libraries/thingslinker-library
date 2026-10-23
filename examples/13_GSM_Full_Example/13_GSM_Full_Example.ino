@@ -26,8 +26,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #define AUTH_TOKEN    "9a1977dd443b7d1f0ff4cbdaa4cbf05e1376b786dcf1da344d06a0d8df46845f"
 #define BLUEPRINT_KEY "BLUEbV7N2u5diuUi"
-#define CLIENT_KEY    ""
-#define SECRET_KEY    ""
 
 #define APN           "internet"   // your SIM card APN
 #define APN_USER      ""
@@ -134,7 +132,10 @@ void setup() {
   iot.onJoystick(PIN_JOYSTICK, onJoystickMove);
 
   // Connect to ThingsLinker
-  iot.begin(CLIENT_KEY, SECRET_KEY, APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, put the username and password first:
+  //   iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  iot.begin(APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
 
   if (iot.mqttConnected()) {
     Serial.println(">>> ThingsLinker GSM ready!");

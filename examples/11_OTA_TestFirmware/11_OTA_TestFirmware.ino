@@ -29,7 +29,9 @@
  * This .bin is the "new firmware" you upload to the OTA shipment. It MUST be
  * compiled with the SAME partition scheme as the base firmware (08_OTA_Update).
  * In Arduino IDE set:
- *   Tools → Partition Scheme → Default with OTA (1.3MB APP / 1.5MB SPIFFS)
+ *   Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)
+ *   ("Default with OTA" leaves 1.3MB per app, which a WiFi + OTA sketch now
+ *   slightly exceeds.)
  *
  * Rules:
  *  - Use the SAME partition scheme for every firmware on this device.
@@ -41,7 +43,7 @@
  *
  * API server
  * ----------
- *  Cloud (default — no change needed): https://iot.thingslinker.in
+ *  Cloud (default — no change needed): https://api.thingslinker.com
  *  Local dev: uncomment the line below and set your server's LAN IP:
  *    #define TL_API_SERVER "http://192.168.1.10:8000"
  *  This must appear BEFORE #include <ThingsLinker.h>.
@@ -57,8 +59,6 @@
 // ── Device credentials ────────────────────────────────────────────────────────
 #define AUTH_TOKEN   "YOUR_DEVICE_AUTH_TOKEN"    // ~64 hex characters
 #define BLUEPRINT_ID "YOUR_BLUEPRINT_ID"         // starts with "BLUE"
-#define CLIENT_KEY   "YOUR_CLIENT_KEY"
-#define SECRET_KEY   "YOUR_SECRET_KEY"
 
 // ── Firmware version ──────────────────────────────────────────────────────────
 static const char* FIRMWARE_VERSION = "4.0";
@@ -191,7 +191,9 @@ void setup() {
   Serial.println("========================================\n");
 
   // ── Connect to WiFi + MQTT ─────────────────────────────────────────────────
-  iot.begin(CLIENT_KEY, SECRET_KEY);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // ── Register callbacks AFTER begin() (same pattern as Full Dashboard) ──────
   iot.onRGB("V6",    onRGBWidget);

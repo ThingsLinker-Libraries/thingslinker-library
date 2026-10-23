@@ -99,8 +99,8 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 // board does NOT have PWRKEY wired to an ESP32 GPIO (e.g. PWRKEY is tied to VCC
 // and the modem powers on automatically when power is applied).
 //
-//   iot.begin(CLIENT_KEY, SECRET_KEY, APN, TL_NO_PWRKEY);
-//   iot.begin(CLIENT_KEY, SECRET_KEY, APN, 4);             // GPIO 4 controls PWRKEY
+//   iot.begin(APN, TL_NO_PWRKEY);
+//   iot.begin(APN, 4);             // GPIO 4 controls PWRKEY
 //
 #define TL_NO_PWRKEY -1
 
@@ -128,7 +128,7 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 // Backend URL used for OTA check and status-update HTTP calls (no trailing /).
 //
 // ► Cloud / production (default — no change needed):
-//     https://iot.thingslinker.in
+//     https://api.thingslinker.com
 //
 // ► Self-hosted / local development:
 //   Option A — edit this file once (affects all sketches):
@@ -138,7 +138,7 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 //     #define TL_API_SERVER "http://192.168.1.10:8000"
 //     #include <ThingsLinker.h>
 #ifndef TL_API_SERVER
-  #define TL_API_SERVER "https://iot.thingslinker.in"
+  #define TL_API_SERVER "https://api.thingslinker.com"
 #endif
 
 // ─────────────────────────────────────────────────────────────────────────────

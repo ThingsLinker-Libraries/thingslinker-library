@@ -27,7 +27,7 @@
  *
  * ── Getting your credentials ─────────────────────────────────────────────────
  *   Organisation Portal → Blueprints → [Blueprint] → Devices → [Device]
- *   Copy: Auth Token, Blueprint Key, Client Key, Secret Key
+ *   Copy: Auth Token, Blueprint Key
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,8 +35,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #define AUTH_TOKEN    "your_device_auth_token"
 #define BLUEPRINT_KEY "your_blueprint_key"       // starts with "BLUE"
-#define CLIENT_KEY    "your_client_key"
-#define SECRET_KEY    "your_secret_key"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. APN — set to your SIM card's APN
@@ -105,7 +103,10 @@ void setup() {
   // iot.debug(false);  // uncomment to suppress Serial debug output
 
   // Begin: power modem, register network, connect MQTT
-  iot.begin(CLIENT_KEY, SECRET_KEY, APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, put the username and password first:
+  //   iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  iot.begin(APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
 
   if (iot.mqttConnected()) {
     Serial.println("\n>>> ThingsLinker GSM ready! <<<");

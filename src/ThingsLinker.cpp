@@ -15,8 +15,8 @@ bool _tlDebugEnabled = TL_DEBUG_DEFAULT;
 ThingsLinker::ThingsLinker(const char* authToken, const char* blueprintId)
   : _authToken(authToken),
     _blueprintId(blueprintId),
-    _clientKey(nullptr),
-    _secretKey(nullptr),
+    _mqttUsername(nullptr),
+    _mqttPassword(nullptr),
     _bleBrandName("ThingsLinker"),
     _initialized(false),
     _lastCheck(0) {
@@ -25,9 +25,9 @@ ThingsLinker::ThingsLinker(const char* authToken, const char* blueprintId)
 // ─────────────────────────────────────────────────────────────────────────────
 // begin()
 // ─────────────────────────────────────────────────────────────────────────────
-void ThingsLinker::begin(const char* clientKey, const char* secretKey) {
-  _clientKey = clientKey;
-  _secretKey = secretKey;
+void ThingsLinker::begin(const char* mqttUsername, const char* mqttPassword) {
+  _mqttUsername = mqttUsername;
+  _mqttPassword = mqttPassword;
 
   // Initialise Serial if the sketch hasn't already done so.
   if (!Serial) {
@@ -51,7 +51,7 @@ void ThingsLinker::begin(const char* clientKey, const char* secretKey) {
       TL_LOG("[Setup] Saved WiFi found, connecting...");
       if (connectWiFi()) {
         TL_LOG("[Setup] ✓ WiFi connected");
-        if (connectMQTT(_authToken, _blueprintId, _clientKey, _secretKey)) {
+        if (connectMQTT(_authToken, _blueprintId, _mqttUsername, _mqttPassword)) {
           TL_LOG("[Setup] ✓ MQTT connected — device ready!");
         }
       } else {
@@ -137,7 +137,7 @@ void ThingsLinker::checkConnections() {
 
   if (isWiFiConnected() && !isMQTTConnected()) {
     TL_LOG("[Check] MQTT lost — reconnecting...");
-    connectMQTT(_authToken, _blueprintId, _clientKey, _secretKey);
+    connectMQTT(_authToken, _blueprintId, _mqttUsername, _mqttPassword);
   }
 }
 
@@ -155,7 +155,7 @@ void ThingsLinker::label   (const char* pin, const TLValue& v) { publishMQTT("La
 void ThingsLinker::send    (const char* pin, const TLValue& v) { publishMQTT("Value Display", pin, v); }
 // Published on the display channel so the device's own Terminal subscription
 // (onTerminal) does not receive it back. Apps match Terminal output by pin.
-void ThingsLinker::terminal(const char* pin, const TLValue& v) { publishMQTT("Value Display", pin, v); }
+void ThingsLinker::terminal(const char* pin, const TLValue& v) { publishMQTT("Terminal",      pin, v); }
 void ThingsLinker::status     (const char* pin, const TLValue& v) { publishMQTT("Status",       pin, v); }
 void ThingsLinker::progress   (const char* pin, float v)          { publishMQTT("Progress Bar", pin, v); }
 void ThingsLinker::selector   (const char* pin, const TLValue& v) { publishMQTT("Selector",     pin, v); }

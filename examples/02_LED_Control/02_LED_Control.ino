@@ -25,7 +25,9 @@ void setup() {
   delay(1000);
   
   // Initialize ThingsLinker with MQTT credentials
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // Listen for button press from app on pin V0
   iot.onButton("V0", [](bool value) {

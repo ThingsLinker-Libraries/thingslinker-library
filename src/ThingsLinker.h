@@ -9,8 +9,8 @@
  *
  *   void setup() {
  *     Serial.begin(115200);
- *     // 2. Start
- *     iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+ *     // 2. Start (no login needed for the ThingsLinker broker)
+ *     iot.begin();
  *   }
  *
  *   void loop() {
@@ -29,7 +29,10 @@
  * library and the organisation portal widget configuration.
  *
  * Get credentials from the ThingsLinker organisation portal:
- *   Blueprints → [Blueprint] → Devices → [Device] → Auth Token / Client Key / Secret Key
+ *   Blueprints → [Blueprint] → Devices → [Device] → Auth Token / Blueprint Key
+ *
+ * No MQTT username or password is needed for the ThingsLinker broker; they
+ * are optional (see begin()).
  */
 
 #ifndef THINGSLINKER_H
@@ -64,10 +67,22 @@ public:
    * Note: call Serial.begin(115200) in your sketch before begin() if you want
    * to see debug output from the very first lines.
    *
-   * @param clientKey MQTT client key (from portal)
-   * @param secretKey MQTT secret key (from portal)
+   * MQTT username and password are OPTIONAL. The ThingsLinker broker does not
+   * need a login, so most sketches just call:
+   *
+   *   iot.begin();
+   *
+   * Pass them only if your own broker asks for one:
+   *
+   *   iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+   *
+   * If you have an MQTT Client Key and Secret Key, the Client Key is the
+   * username and the Secret Key is the password.
+   *
+   * @param mqttUsername  Optional broker username (leave out or "" for none)
+   * @param mqttPassword  Optional broker password (leave out or "" for none)
    */
-  void begin(const char* clientKey, const char* secretKey);
+  void begin(const char* mqttUsername = nullptr, const char* mqttPassword = nullptr);
 
   /**
    * Process all library tasks. Call every iteration of loop().
@@ -504,7 +519,7 @@ public:
    * Example:
    *   iot.setBLEName("AcmeSensors");
    *   // Device appears as: AcmeSensors_BC6575C55494
-   *   iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+   *   iot.begin();
    */
   void setBLEName(const char* brandName);
 
@@ -526,8 +541,8 @@ public:
 private:
   const char*   _authToken;
   const char*   _blueprintId;
-  const char*   _clientKey;
-  const char*   _secretKey;
+  const char*   _mqttUsername;
+  const char*   _mqttPassword;
   const char*   _bleBrandName;   // Custom BLE prefix (default: "ThingsLinker")
   bool          _initialized;
   unsigned long _lastCheck;

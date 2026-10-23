@@ -17,7 +17,9 @@ ThingsLinker iot("YOUR_DEVICE_AUTH_TOKEN", "YOUR_BLUEPRINT_ID");
 
 void setup() {
   // Initialize ThingsLinker with MQTT credentials
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 }
 
 void loop() {

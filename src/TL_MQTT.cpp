@@ -4,6 +4,7 @@
  */
 
 #include "TL_MQTT.h"
+#include "TL_Echo.h"
 #include "TL_Config.h"
 #include "TL_Codec.h"
 #include "TL_Offline.h"
@@ -135,7 +136,10 @@ static bool sendOrStore(const char* widgetType, const char* pin, const char* pay
 
   if (connected && tlOfflineCount() == 0) {
     String topic = buildTopic(widgetType, pin);
-    if (_mqtt.publish(topic.c_str(), payload, false)) return true;
+    if (_mqtt.publish(topic.c_str(), payload, false)) {
+      tlEchoNote(topic.c_str(), payload);
+      return true;
+    }
   }
 
   if (tlOfflineEnabled()) {
@@ -172,6 +176,7 @@ static void sendStoredReadings() {
   _lastStoredSend = now;
   String topic = buildTopic(widgetType, pin);
   if (!_mqtt.publish(topic.c_str(), payload, false)) return;   // try again next time
+  tlEchoNote(topic.c_str(), payload);
 
   tlOfflinePop();
   if (tlOfflineCount() == 0) TL_LOG("[Offline] ✓ All stored readings sent");
@@ -200,6 +205,9 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   TL_LOG("[MQTT] Received on: " + String(topic));
   TL_LOG("[MQTT] Payload: " + String(buf));
+
+  // The device's own message coming back is not a command from the app
+  if (tlEchoIsOwn(topic, buf)) return;
 
   // Parse JSON (ArduinoJson 7 sizes the document automatically)
   JsonDocument doc;
@@ -287,7 +295,7 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
-                 const char* clientKey,       const char* secretKey) {
+                 const char* mqttUsername,       const char* mqttPassword) {
   _authToken   = String(authTokenParam   ? authTokenParam   : "");
   _blueprintId = String(blueprintIdParam ? blueprintIdParam : "");
 
@@ -306,15 +314,15 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
   TL_LOG("[MQTT] Status topic: " + statusTopic);
 
   bool ok;
-  bool hasAuth = (clientKey && clientKey[0] != '\0') &&
-                 (secretKey && secretKey[0] != '\0');
+  bool hasAuth = (mqttUsername && mqttUsername[0] != '\0') &&
+                 (mqttPassword && mqttPassword[0] != '\0');
 
   if (hasAuth) {
-    TL_LOG("[MQTT] Authenticating...");
+    TL_LOG("[MQTT] Logging in with the MQTT username...");
     ok = _mqtt.connect(
       clientId.c_str(),
-      clientKey,
-      secretKey,
+      mqttUsername,
+      mqttPassword,
       statusTopic.c_str(), 0, true, "OFFLINE"
     );
   } else {
@@ -332,12 +340,12 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
       case -4: TL_LOG("[MQTT]   Connection timeout"); break;
       case -3: TL_LOG("[MQTT]   Connection lost");   break;
       case -2: TL_LOG("[MQTT]   Connect failed");    break;
-      case -1: TL_LOG("[MQTT]   Auth failed — check client key / secret key"); break;
+      case -1: TL_LOG("[MQTT]   Disconnected");  break;
       case  1: TL_LOG("[MQTT]   Bad protocol version"); break;
       case  2: TL_LOG("[MQTT]   Client ID rejected"); break;
       case  3: TL_LOG("[MQTT]   Server unavailable"); break;
-      case  4: TL_LOG("[MQTT]   Bad username or password"); break;
-      case  5: TL_LOG("[MQTT]   Not authorized"); break;
+      case  4: TL_LOG("[MQTT]   Bad username or password (the ThingsLinker broker needs none: call iot.begin())"); break;
+      case  5: TL_LOG("[MQTT]   Not authorized (the ThingsLinker broker needs no login: call iot.begin())"); break;
     }
     return false;
   }

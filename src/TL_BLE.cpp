@@ -35,9 +35,16 @@ class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer*) override {
     TL_LOG("[BLE] App connected");
   }
-  void onDisconnect(BLEServer*) override {
+  void onDisconnect(BLEServer* server) override {
     TL_LOG("[BLE] App disconnected");
     if (_disconnectCb) _disconnectCb();
+    // An ESP32 stops advertising once something connects. Advertise again so
+    // the app or browser can reconnect, for example after the link dropped
+    // while the user was typing the WiFi details.
+    if (_bleActive && server) {
+      server->startAdvertising();
+      TL_LOG("[BLE] Advertising again");
+    }
   }
 };
 

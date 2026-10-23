@@ -24,7 +24,9 @@ ThingsLinker iot("YOUR_DEVICE_AUTH_TOKEN", "YOUR_BLUEPRINT_ID");
 
 void setup() {
   // Step 2: Initialize with your MQTT credentials
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // That's it! Library handles everything automatically
 }
@@ -64,15 +66,11 @@ void loop() {
  * 4. Copy these values from the device page:
  *    - Device Auth Token (required)
  *    - Blueprint ID (required - e.g., "BLUExxxxxxxxxxxxxxxx")
- *    - Client Key (required)
- *    - Secret Key (required)
  * 5. Paste them in the code above
  *
  * Credential format:
  *   authToken   = "abc123..."                 // ~64 hex chars
  *   blueprintId = "BLUExxxxxxxxxxxxxxxx"       // starts with "BLUE"
- *   clientKey   = "client-xxxx-..."
- *   secretKey   = "secret-xxxx-..."
  *
  * ========================================
  */

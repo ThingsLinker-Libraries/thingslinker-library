@@ -22,7 +22,9 @@
  * ------------------------------------------
  * OTA requires an OTA-capable partition scheme for BOTH this sketch and the
  * new .bin you upload via the portal. In Arduino IDE set:
- *   Tools → Partition Scheme → Default with OTA (1.3MB APP / 1.5MB SPIFFS)
+ *   Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)
+ *   ("Default with OTA" leaves 1.3MB per app, which a WiFi + OTA sketch now
+ *   slightly exceeds.)
  *
  * Rules:
  *  - Use the SAME partition scheme for every firmware on this device.
@@ -34,7 +36,7 @@
  *
  * API server
  * ----------
- *  Cloud (default — no change needed): https://iot.thingslinker.in
+ *  Cloud (default — no change needed): https://api.thingslinker.com
  *  Local dev: uncomment the line below and set your server's LAN IP:
  *    #define TL_API_SERVER "http://192.168.1.10:8000"
  *  This must appear BEFORE #include <ThingsLinker.h>.
@@ -56,8 +58,6 @@
 // ── Device credentials (Org Portal → Blueprints → [Blueprint] → Devices → [Device]) ──
 #define AUTH_TOKEN    "YOUR_DEVICE_AUTH_TOKEN"   // ~64 hex characters
 #define BLUEPRINT_ID  "YOUR_BLUEPRINT_ID"        // starts with "BLUE"
-#define CLIENT_KEY    "YOUR_CLIENT_KEY"
-#define SECRET_KEY    "YOUR_SECRET_KEY"
 
 // ── OTA check interval ────────────────────────────────────────────────────────
 // How often the device polls the backend for pending updates.
@@ -85,7 +85,9 @@ void setup() {
   Serial.println("   API: " TL_API_SERVER);
   Serial.println("========================================");
 
-  iot.begin(CLIENT_KEY, SECRET_KEY);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // Trigger an immediate OTA check after the first OTA_INTERVAL elapses.
   // Setting _lastOtaCheck = 0 ensures the first check happens as soon as

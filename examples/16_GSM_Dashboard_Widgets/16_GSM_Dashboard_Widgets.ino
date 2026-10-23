@@ -45,8 +45,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #define AUTH_TOKEN    "your_device_auth_token"
 #define BLUEPRINT_KEY "your_blueprint_key"       // starts with "BLUE"
-#define CLIENT_KEY    "your_client_key"
-#define SECRET_KEY    "your_secret_key"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. APN — set to your SIM card's APN
@@ -180,7 +178,10 @@ void setup() {
   // For a Selector with text values use iot.onSelectorText(), and for a
   // Keypad with number values use iot.onKeypad().
 
-  iot.begin(CLIENT_KEY, SECRET_KEY, APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, put the username and password first:
+  //   iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  iot.begin(APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
 
   // Settings survive a reboot
   mode     = iot.getInt  ("mode",     0);

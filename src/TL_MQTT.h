@@ -21,14 +21,14 @@
  * @brief Connect to MQTT server
  * @param authToken Device authentication token
  * @param blueprintId Device blueprint ID
- * @param clientKey MQTT client key
- * @param secretKey MQTT secret key
+ * @param mqttUsername Optional broker username (nullptr or "" connects without a login)
+ * @param mqttPassword Optional broker password (nullptr or "" connects without a login)
  * @return true if connected
  *
  * Example:
- *   connectMQTT("YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_ID", "YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+ *   connectMQTT("YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_KEY", nullptr, nullptr);
  */
-bool connectMQTT(const char* authToken, const char* blueprintId, const char* clientKey, const char* secretKey);
+bool connectMQTT(const char* authToken, const char* blueprintId, const char* mqttUsername, const char* mqttPassword);
 
 /**
  * @brief Disconnect from MQTT

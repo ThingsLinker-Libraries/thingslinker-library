@@ -20,8 +20,6 @@
  *   3. Copy:
  *        - Device Auth Token
  *        - Blueprint ID  (e.g. "BLUExxxxxxxxxxxxxxxx")
- *        - Client Key
- *        - Secret Key
  *
  * Expected Serial output (115200 baud):
  *   ========================================
@@ -55,7 +53,9 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 }
 
 void loop() {

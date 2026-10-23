@@ -52,8 +52,6 @@
 // Replace with your values from the ThingsLinker portal
 const char* AUTH_TOKEN   = "YOUR_AUTH_TOKEN";
 const char* BLUEPRINT_ID = "YOUR_BLUEPRINT_ID";
-const char* CLIENT_KEY   = "YOUR_CLIENT_KEY";
-const char* SECRET_KEY   = "YOUR_SECRET_KEY";
 
 // ── Hardware ─────────────────────────────────────────────────
 #define LED_PIN   2   // Built-in LED — change if your board differs
@@ -336,7 +334,9 @@ void setup() {
 
   // ── Start ThingsLinker ──────────────────────────────────────
   // Handles BLE provisioning (first boot) or auto WiFi + MQTT connect.
-  iot.begin(CLIENT_KEY, SECRET_KEY);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // ── Subscribe: App → Device ─────────────────────────────────
   iot.onButton("V0", onLightButton);  // Button  — toggle LED

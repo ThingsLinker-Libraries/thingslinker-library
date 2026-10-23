@@ -12,6 +12,7 @@
  */
 
 #include "ThingsLinkerGSM.h"
+#include "TL_Echo.h"
 #include "TL_Codec.h"
 #include <time.h>
 
@@ -24,8 +25,8 @@ ThingsLinkerGSM::ThingsLinkerGSM(HardwareSerial& serial,
   : _serial(serial),
     _authToken(authToken),
     _blueprintId(blueprintId),
-    _clientKey(nullptr),
-    _secretKey(nullptr),
+    _mqttUsername(nullptr),
+    _mqttPassword(nullptr),
     _apn(""),
     _gprsUser(""),
     _gprsPass(""),
@@ -64,14 +65,21 @@ ThingsLinkerGSM::ThingsLinkerGSM(HardwareSerial& serial,
 // ─────────────────────────────────────────────────────────────────────────────
 // begin()
 // ─────────────────────────────────────────────────────────────────────────────
-void ThingsLinkerGSM::begin(const char* clientKey,
-                             const char* secretKey,
+void ThingsLinkerGSM::begin(const char* apn,
+                             int         pwrPin,
+                             const char* gprsUser,
+                             const char* gprsPass) {
+  begin("", "", apn, pwrPin, gprsUser, gprsPass);   // no MQTT login
+}
+
+void ThingsLinkerGSM::begin(const char* mqttUsername,
+                             const char* mqttPassword,
                              const char* apn,
                              int         pwrPin,
                              const char* gprsUser,
                              const char* gprsPass) {
-  _clientKey = clientKey;
-  _secretKey = secretKey;
+  _mqttUsername = mqttUsername;
+  _mqttPassword = mqttPassword;
   _apn       = apn;
   _pwrPin    = pwrPin;
   _gprsUser  = gprsUser;
@@ -519,11 +527,11 @@ bool ThingsLinkerGSM::_connectMQTT() {
   TL_LOG("[MQTT] Connecting to " MQTT_SERVER ":" + String(MQTT_PORT) + " (TLS)");
   {
     char cmd[256];
-    bool hasAuth = (_clientKey && _clientKey[0]) && (_secretKey && _secretKey[0]);
+    bool hasAuth = (_mqttUsername && _mqttUsername[0]) && (_mqttPassword && _mqttPassword[0]);
     if (hasAuth) {
       snprintf(cmd, sizeof(cmd),
                "AT+CMQTTCONNECT=0,\"tcp://" MQTT_SERVER ":%d\",%d,1,\"%s\",\"%s\"",
-               MQTT_PORT, MQTT_KEEPALIVE, _clientKey, _secretKey);
+               MQTT_PORT, MQTT_KEEPALIVE, _mqttUsername, _mqttPassword);
     } else {
       snprintf(cmd, sizeof(cmd),
                "AT+CMQTTCONNECT=0,\"tcp://" MQTT_SERVER ":%d\",%d,1",
@@ -848,6 +856,9 @@ void ThingsLinkerGSM::_dispatchMessage(const char* topic, const char* payload) {
     return;
   }
 
+  // The device's own message coming back is not a command from the app
+  if (tlEchoIsOwn(topic, payload)) return;
+
   JsonDocument doc;
   if (deserializeJson(doc, payload) != DeserializationError::Ok) {
     TL_LOG("[MQTT] JSON parse error");
@@ -1072,7 +1083,10 @@ static bool clockIsSet() {
 bool ThingsLinkerGSM::_sendOrStore(const char* widgetType, const char* pin, const char* payload) {
   if (_mqttOk && tlOfflineCount() == 0) {
     String topic = _buildTopic(widgetType, pin);
-    if (_mqttPublishAT(topic.c_str(), payload)) return true;
+    if (_mqttPublishAT(topic.c_str(), payload)) {
+      tlEchoNote(topic.c_str(), payload);
+      return true;
+    }
   }
 
   if (tlOfflineEnabled()) {
@@ -1106,6 +1120,7 @@ void ThingsLinkerGSM::_sendStoredReadings() {
   _lastStoredSend = now;
   String topic = _buildTopic(widgetType, pin);
   if (!_mqttPublishAT(topic.c_str(), payload)) return;   // try again next time
+  tlEchoNote(topic.c_str(), payload);
 
   tlOfflinePop();
   if (tlOfflineCount() == 0) TL_LOG("[Offline] ✓ All stored readings sent");
@@ -1158,7 +1173,7 @@ void ThingsLinkerGSM::label   (const char* p, const TLValue& v) { _publish("Labe
 void ThingsLinkerGSM::send    (const char* p, const TLValue& v) { _publish("Value Display", p, v); }
 // Published on the display channel so the device's own Terminal subscription
 // (onTerminal) does not receive it back. Apps match Terminal output by pin.
-void ThingsLinkerGSM::terminal(const char* p, const TLValue& v) { _publish("Value Display", p, v); }
+void ThingsLinkerGSM::terminal(const char* p, const TLValue& v) { _publish("Terminal",      p, v); }
 void ThingsLinkerGSM::map    (const char* p, float lat, float lng) { _publishMap(p, lat, lng); }
 void ThingsLinkerGSM::status     (const char* p, const TLValue& v) { _publish("Status",       p, v); }
 void ThingsLinkerGSM::progress   (const char* p, float v)          { _publish("Progress Bar", p, v); }

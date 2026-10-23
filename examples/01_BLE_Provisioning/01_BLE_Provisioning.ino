@@ -36,8 +36,6 @@
 // ── Credentials ──────────────────────────────────────────────
 const char* AUTH_TOKEN   = "YOUR_AUTH_TOKEN";
 const char* BLUEPRINT_ID = "YOUR_BLUEPRINT_ID";
-const char* CLIENT_KEY   = "YOUR_CLIENT_KEY";
-const char* SECRET_KEY   = "YOUR_SECRET_KEY";
 
 // ── Hardware ─────────────────────────────────────────────────
 #define LED_PIN   2   // Built-in LED on most ESP32 boards
@@ -84,7 +82,9 @@ void setup() {
   // Initialise ThingsLinker.
   // • If no WiFi credentials are saved → BLE provisioning starts automatically.
   // • If credentials are saved → connects to WiFi + MQTT directly.
-  iot.begin(CLIENT_KEY, SECRET_KEY);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // Register app widget callbacks
   iot.onButton("V0", onAppButton);

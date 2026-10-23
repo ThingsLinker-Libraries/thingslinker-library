@@ -27,9 +27,8 @@
  *   void setup() {
  *     Serial.begin(115200);
  *     Serial2.begin(115200, SERIAL_8N1, 16, 17);   // RX=16, TX=17
- *     iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY",
- *               "airtelgprs.com",  // APN for your SIM
- *               4);                // PWRKEY pin
+ *     iot.begin("airtelgprs.com",   // APN for your SIM
+ *               4);                 // PWRKEY pin
  *   }
  *
  *   void loop() {
@@ -84,15 +83,34 @@ public:
    * A76XX AT+CMQTT* commands (TLS, no certificate verification).
    * Call once in setup().
    *
-   * @param clientKey  MQTT client key (from Organisation Portal)
-   * @param secretKey  MQTT secret key (from Organisation Portal)
+   * The ThingsLinker broker does not need an MQTT login, so most sketches use:
+   *
+   *   iot.begin("airtelgprs.com", 4);
+   *
    * @param apn        APN for your SIM card (e.g. "airtelgprs.com", "internet")
    * @param pwrPin     ESP32 GPIO wired to modem PWRKEY (-1 to skip power pulse)
    * @param gprsUser   GPRS username   — leave empty for most carriers
    * @param gprsPass   GPRS password   — leave empty for most carriers
    */
-  void begin(const char* clientKey,
-             const char* secretKey,
+  void begin(const char* apn,
+             int         pwrPin   = -1,
+             const char* gprsUser = "",
+             const char* gprsPass = "");
+
+  /**
+   * Same as above, with an OPTIONAL MQTT username and password first. Use this
+   * form only if your own broker asks for a login ("" means no login):
+   *
+   *   iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", "airtelgprs.com", 4);
+   *
+   * If you have an MQTT Client Key and Secret Key, the Client Key is the
+   * username and the Secret Key is the password.
+   *
+   * @param mqttUsername  Optional broker username ("" for none)
+   * @param mqttPassword  Optional broker password ("" for none)
+   */
+  void begin(const char* mqttUsername,
+             const char* mqttPassword,
              const char* apn,
              int         pwrPin   = -1,
              const char* gprsUser = "",
@@ -315,7 +333,7 @@ public:
    *
    * Example:
    *   iot.setPowerKeyActiveLow(true);
-   *   iot.begin(CLIENT_KEY, SECRET_KEY, APN, 7);
+   *   iot.begin(APN, 7);
    */
   void setPowerKeyActiveLow(bool activeLow);
 
@@ -354,8 +372,8 @@ private:
 
   const char*   _authToken;
   const char*   _blueprintId;
-  const char*   _clientKey;
-  const char*   _secretKey;
+  const char*   _mqttUsername;
+  const char*   _mqttPassword;
   const char*   _apn;
   const char*   _gprsUser;
   const char*   _gprsPass;

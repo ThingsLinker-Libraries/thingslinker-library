@@ -26,7 +26,9 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
 
   // Initialize ThingsLinker with MQTT credentials
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // Load saved data on startup
   String deviceName = iot.getString("deviceName", "Unnamed Device");

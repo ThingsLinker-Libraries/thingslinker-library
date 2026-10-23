@@ -33,8 +33,6 @@
 
 #define AUTH_TOKEN    "your_device_auth_token"
 #define BLUEPRINT_KEY "your_blueprint_key"       // starts with "BLUE"
-#define CLIENT_KEY    "your_client_key"
-#define SECRET_KEY    "your_secret_key"
 
 #define APN           "airtelgprs.com"
 #define APN_USER      ""
@@ -68,7 +66,10 @@ void setup() {
   // after begin(), and changed at any time.
   iot.offlineStorage(KEEP_READINGS_OFFLINE);
 
-  iot.begin(CLIENT_KEY, SECRET_KEY, APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, put the username and password first:
+  //   iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
+  iot.begin(APN, MODEM_PWR_PIN, APN_USER, APN_PASS);
 
   if (!iot.mqttConnected()) {
     Serial.println("\n>>> Not connected yet — readings will be stored and sent later <<<");

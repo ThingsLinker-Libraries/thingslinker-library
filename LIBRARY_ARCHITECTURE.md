@@ -196,7 +196,7 @@ static int pinCallbackCount = 0;
 **Key Functions**:
 ```cpp
 bool connectMQTT(const char* authToken, const char* blueprintId,
-                 const char* clientKey, const char* secretKey);
+                 const char* mqttUsername, const char* mqttPassword);
 void disconnectMQTT();
 bool isMQTTConnected();
 void subscribeMQTT(const char* widgetType, const char* pin,
@@ -219,13 +219,15 @@ device/Gauge/YOUR_BLUEPRINT_ID/YOUR_AUTH_TOKEN/V1/
 
 **Client ID Generation**:
 ```cpp
-String clientId = String(clientKey) + "_" + getChipID();
-// Example: YOUR_CLIENT_KEY_A8032AB123CD
+String clientId = "ThingsLinker_" + getChipID();   // GSM: "TLG_" + chip ID
+// Example: ThingsLinker_A8032AB123CD
 ```
 
 **Authentication**:
-- **Production**: Username = `clientKey`, Password = `secretKey`
-- **Test (ThingsLinker)**: No authentication
+- The ThingsLinker broker accepts devices without a login (`iot.begin()`).
+- Optional: `iot.begin("MQTT_USERNAME", "MQTT_PASSWORD")` sends a username and
+  password, for a broker of your own that asks for one. Both must be non-empty,
+  otherwise the library connects without a login.
 
 **Payload Format**:
 
@@ -263,8 +265,8 @@ struct PinCallback {
 ```cpp
 const char* _authToken;
 const char* _blueprintId;
-const char* _clientKey;
-const char* _secretKey;
+const char* _mqttUsername;
+const char* _mqttPassword;
 bool _debugEnabled;
 bool _initialized;
 unsigned long _lastCheck;
@@ -275,7 +277,7 @@ unsigned long _lastCheck;
 #### Initialization:
 ```cpp
 ThingsLinker(const char* authToken, const char* blueprintId);
-void begin(const char* clientKey, const char* secretKey);
+void begin(const char* mqttUsername, const char* mqttPassword);
 void run();
 ```
 
@@ -345,14 +347,14 @@ void setBLEName(const char* name);    // Override default BLE name (call before 
 ThingsLinker iot("YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_ID");
 
 void setup() {
-  iot.begin("YOUR_CLIENT_KEY", "YOUR_SECRET_KEY");
+  iot.begin();   // optional: iot.begin("MQTT_USERNAME", "MQTT_PASSWORD")
 }
 ```
 
 **What Happens**:
 1. Constructor stores `authToken` and `blueprintId`
 2. `begin()` is called in `setup()`
-3. Stores `clientKey` and `secretKey`
+3. Stores the optional `mqttUsername` and `mqttPassword` (none by default)
 4. Initializes Serial @ 115200 baud
 5. Prints banner with Chip ID
 6. Checks for saved WiFi credentials
@@ -369,7 +371,7 @@ begin()
     → WiFi.begin(ssid, password)
     → Wait up to 30 seconds
     → Success!
-  → connectMQTT(authToken, blueprintId, clientKey, secretKey)
+  → connectMQTT(authToken, blueprintId, mqttUsername, mqttPassword)
     → Set MQTT server and callback
     → Generate unique clientId
     → Connect with authentication
@@ -464,7 +466,7 @@ BLE Callback triggered
       → stopBLE()
         → Stop advertising
         → Deinit BLE
-    → connectMQTT(authToken, blueprintId, clientKey, secretKey)
+    → connectMQTT(authToken, blueprintId, mqttUsername, mqttPassword)
       → MQTT connects successfully
 ```
 
@@ -532,7 +534,7 @@ void ThingsLinker::checkConnections() {
   if (isWiFiConnected() && !isMQTTConnected()) {
     Serial.println("[Check] MQTT disconnected");
     Serial.println("[Check] Reconnecting MQTT...");
-    connectMQTT(_authToken, _blueprintId, _clientKey, _secretKey);
+    connectMQTT(_authToken, _blueprintId, _mqttUsername, _mqttPassword);
   }
 }
 ```
@@ -646,10 +648,10 @@ LED ON
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  setup() → iot.begin(clientKey, secretKey)                 │
+│  setup() → iot.begin()                                      │
 │    • Initialize Serial @ 115200                             │
 │    • Print banner with Chip ID                              │
-│    • Set _clientKey and _secretKey                          │
+│    • Store optional MQTT username/password (none by default)│
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
@@ -687,10 +689,10 @@ LED ON
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  connectMQTT(authToken, blueprintId, clientKey, secretKey)  │
+│  connectMQTT(authToken, blueprintId, mqttUser, mqttPass)    │
 │    • Set MQTT server: mqtt.thingslinker.com:8883            │
-│    • Generate clientId: clientKey + "_" + ChipID            │
-│    • Connect with username/password authentication          │
+│    • Client ID: "ThingsLinker_" + ChipID                    │
+│    • Connect (with username/password only if given)         │
 │    • Set callback for incoming messages                     │
 └────────────────────────┬────────────────────────────────────┘
                          │
@@ -898,13 +900,11 @@ checkConnections() [called every 5 seconds]
 
 ### MQTT Authentication
 
-**Production**:
-- Username/password authentication required
-- Client key and secret key validated by broker
-
-**Test (ThingsLinker)**:
-- No authentication (public broker)
-- **WARNING**: Anyone can see your data!
+- The ThingsLinker broker (`mqtt.thingslinker.com:8883`, TLS) accepts devices
+  without a username or password, so `iot.begin()` needs no arguments.
+- MQTT username and password are optional. Pass them only for a broker of your
+  own that requires a login: `iot.begin("MQTT_USERNAME", "MQTT_PASSWORD")`
+  (GSM: `iot.begin("MQTT_USERNAME", "MQTT_PASSWORD", APN, pwrPin)`).
 
 ---
 
@@ -931,7 +931,7 @@ checkConnections() [called every 5 seconds]
 **Issue**: MQTT connection fails (State: -2)
 - **Check**: Internet connectivity
 - **Check**: MQTT server reachable (ping mqtt.thingslinker.com)
-- **Check**: Client key and secret key correct
+- **Check**: No MQTT username/password passed (the ThingsLinker broker needs none)
 - **Check**: Auth token and blueprint ID valid
 
 **Issue**: Callbacks not triggering

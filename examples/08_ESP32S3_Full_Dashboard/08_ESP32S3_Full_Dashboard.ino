@@ -55,8 +55,6 @@
 // ── Credentials ──────────────────────────────────────────────
 const char* AUTH_TOKEN   = "9a1977dd443b7d1f0ff4cbdaa4cbf05e1376b786dcf1da344d06a0d8df46845f";
 const char* BLUEPRINT_ID = "BLUEbV7N2u5diuUi";
-const char* CLIENT_KEY   = "";
-const char* SECRET_KEY   = "";
 
 // ── Hardware ─────────────────────────────────────────────────
 #define BUTTON_PIN     41   // Physical push button (Room Light1)
@@ -361,7 +359,9 @@ void setup() {
   }
 
   // ── Start ThingsLinker ──────────────────────────────────────
-  iot.begin(CLIENT_KEY, SECRET_KEY);
+  // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
+  // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
+  iot.begin();
 
   // ── Restore last state from NVS (survives reboot) ───────────
   // Two-layer state recovery:
