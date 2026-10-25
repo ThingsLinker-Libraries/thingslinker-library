@@ -13,8 +13,8 @@
  *  ├─────┼──────────────┼────────────┼──────────────────────────────┤
  *  │ V0  │ Button       │ App→Device │ Toggles built-in LED         │
  *  │ V1  │ Switch       │ App→Device │ Relay sim (prints to Serial) │
- *  │ V2  │ Slider       │ App→Device │ Brightness 0–100             │
- *  │ V3  │ RGB          │ App→Device │ Color + on/off               │
+ *  │ V2  │ Slider       │ App→Device │ RGB strip brightness 0–100   │
+ *  │ V3  │ RGB          │ App→Device │ Color, on/off, count, effect │
  *  │ V4  │ Timer        │ App→Device │ Countdown seconds            │
  *  │ V5  │ Joystick     │ App→Device │ X/Y axis –1.0 to 1.0        │
  *  │ V6  │ Gauge        │ Device→App │ Temperature °C               │
@@ -27,6 +27,9 @@
  *  Hardware: any ESP32 board.
  *    Built-in LED: GPIO 2 (change LED_PIN if different)
  *    BOOT button:  GPIO 0 (hold >3 s to reset WiFi)
+ *    RGB strip:    WS2812 / NeoPixel data on GPIO 4 (RGB_PIN), shown
+ *                  by the V3 RGB widget. Needs the "Adafruit NeoPixel"
+ *                  library (Arduino Library Manager).
  *
  *  CREDENTIALS: ThingsLinker org portal →
  *    Blueprints → [Blueprint] → Devices → [Device]
@@ -34,6 +37,8 @@
  */
 
 #include <ThingsLinker.h>
+#include <Adafruit_NeoPixel.h>   // Install: Arduino Library Manager → "Adafruit NeoPixel"
+#include "RGBEffects.h"          // colour correction and the RGB widget's effects (this folder)
 
 // ── Credentials ──────────────────────────────────────────────
 const char* AUTH_TOKEN   = "YOUR_AUTH_TOKEN";
@@ -42,6 +47,17 @@ const char* BLUEPRINT_ID = "YOUR_BLUEPRINT_ID";
 // ── Hardware ─────────────────────────────────────────────────
 #define LED_PIN   2   // Built-in LED on most ESP32 boards
 #define BOOT_PIN  0   // BOOT button — hold >3 s to reset WiFi
+
+// ── RGB strip (V3) ───────────────────────────────────────────
+// To use the single RGB LED built into an ESP32-S3 DevKit instead,
+// set RGB_PIN to 48 (38 on some boards) and RGB_LED_COUNT to 1.
+#define RGB_PIN          4    // WS2812 / NeoPixel data pin
+#define RGB_LED_COUNT    8    // LEDs on the strip
+#define RGB_COLOR_ORDER  NEO_GRB  // if red shows as green, use NEO_RGB
+#define MAX_BRIGHTNESS   30   // 0–100 %; keeps USB power safe, raise with a 5 V supply
+
+Adafruit_NeoPixel strip(RGB_LED_COUNT, RGB_PIN, RGB_COLOR_ORDER + NEO_KHZ800);
+RGBEffects        effects(strip);
 
 // ── ThingsLinker ─────────────────────────────────────────────
 ThingsLinker iot(AUTH_TOKEN, BLUEPRINT_ID);
@@ -52,6 +68,8 @@ bool  relayOn     = false;
 float brightness  = 50.0f;
 uint8_t rgbR = 255, rgbG = 255, rgbB = 255;
 bool    rgbOn     = false;
+uint16_t rgbCount  = RGB_LED_COUNT;
+String   rgbPattern = "Default";
 float   timerSecs = 0.0f;
 float   joystickX = 0.0f, joystickY = 0.0f;
 
@@ -62,8 +80,6 @@ float pressure    = 1013.0f;
 
 // ── Timing ───────────────────────────────────────────────────
 unsigned long lastPublish     = 0;
-unsigned long bootPressStart  = 0;
-bool          bootWasPressed  = false;
 bool          _prevMQTT       = false;
 
 const unsigned long PUBLISH_INTERVAL = 5000;
@@ -74,6 +90,12 @@ float drift(float v, float lo, float hi, float step) {
   if (v < lo) v = lo;
   if (v > hi) v = hi;
   return v;
+}
+
+// Shows the current RGB state on the strip. effects.loop() draws it.
+void applyRGB() {
+  float capped = brightness > MAX_BRIGHTNESS ? MAX_BRIGHTNESS : brightness;
+  effects.set(rgbR, rgbG, rgbB, rgbOn, rgbCount, rgbPattern.c_str(), capped);
 }
 
 // ── Callbacks: App → Device ──────────────────────────────────
@@ -95,21 +117,26 @@ void onSwitch(bool on) {
   // digitalWrite(RELAY_PIN, on ? HIGH : LOW);
 }
 
-// V2: Slider — brightness 0–100
+// V2: Slider — RGB strip brightness 0–100
 void onSlider(float value) {
   brightness = value;
   iot.saveFloat("brightness", value);
+  applyRGB();
   Serial.println("[V2 Slider] Brightness: " + String((int)brightness) + "%");
 }
 
 // V3: RGB — color picker + on/off + LED count + pattern
 void onRGB(uint8_t r, uint8_t g, uint8_t b, bool on, uint16_t count, const char* pattern) {
   rgbR = r; rgbG = g; rgbB = b; rgbOn = on;
+  rgbCount   = count;
+  rgbPattern = pattern ? pattern : "Default";
   iot.saveInt ("rgb_r",   r);
   iot.saveInt ("rgb_g",   g);
   iot.saveInt ("rgb_b",   b);
   iot.saveBool("rgb_on",  on);
   iot.saveInt ("rgb_cnt", count);
+  iot.saveString("rgb_pat", rgbPattern);
+  applyRGB();
   Serial.printf("[V3 RGB] R:%d G:%d B:%d  On:%s  Count:%d  Pattern:%s\n",
                 r, g, b, on ? "YES" : "NO", count, pattern);
 }
@@ -152,19 +179,6 @@ void publishAll() {
                 temperature, humidity, pressure);
 }
 
-// ── BOOT button: hold >3 s → reset WiFi ──────────────────────
-void handleBootButton() {
-  bool pressed = (digitalRead(BOOT_PIN) == LOW);
-  if (pressed && !bootWasPressed) { bootWasPressed = true; bootPressStart = millis(); }
-  if (!pressed && bootWasPressed) {
-    bootWasPressed = false;
-    if (millis() - bootPressStart >= 3000) {
-      Serial.println("[BOOT] Long press — resetting WiFi...");
-      iot.resetWiFi();
-    }
-  }
-}
-
 // ── Setup ─────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
@@ -176,13 +190,20 @@ void setup() {
 
   pinMode(LED_PIN,  OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  pinMode(BOOT_PIN, INPUT_PULLUP);
+
+  strip.begin();   // RGB strip off at startup
+  strip.clear();
+  strip.show();
 
   // Boot blink: 3× confirms power-on
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, HIGH); delay(150);
     digitalWrite(LED_PIN, LOW);  delay(150);
   }
+
+  // Hold BOOT for 3 s to reset WiFi. Reset WiFi in the app or the User
+  // Portal does the same (turn that off with iot.remoteReset(false)).
+  iot.resetButton(BOOT_PIN);
 
   // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
   // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
@@ -196,8 +217,11 @@ void setup() {
   rgbG       = (uint8_t)iot.getInt("rgb_g", 255);
   rgbB       = (uint8_t)iot.getInt("rgb_b", 255);
   rgbOn      = iot.getBool ("rgb_on",   false);
+  rgbCount   = (uint16_t)iot.getInt("rgb_cnt", RGB_LED_COUNT);
+  rgbPattern = iot.getString("rgb_pat", "Default");
   timerSecs  = iot.getFloat("timer_secs", 0.0f);
   digitalWrite(LED_PIN, ledOn ? HIGH : LOW);
+  applyRGB();
   Serial.printf("[NVS] LED:%s  Relay:%s  RGB:%s  Brightness:%.0f%%\n",
                 ledOn ? "ON":"OFF", relayOn ? "ON":"OFF",
                 rgbOn ? "ON":"OFF", brightness);
@@ -221,8 +245,8 @@ void setup() {
   Serial.println("\n[Widgets] All registered:");
   Serial.println("  V0  Button       App→Device  Toggle LED");
   Serial.println("  V1  Switch       App→Device  Relay on/off");
-  Serial.println("  V2  Slider       App→Device  Brightness 0–100");
-  Serial.println("  V3  RGB          App→Device  Color picker");
+  Serial.println("  V2  Slider       App→Device  RGB brightness 0–100");
+  Serial.println("  V3  RGB          App→Device  RGB strip on GPIO " + String(RGB_PIN));
   Serial.println("  V4  Timer        App→Device  Countdown");
   Serial.println("  V5  Joystick     App→Device  X/Y axis");
   Serial.println("  V6  Gauge        Device→App  Temperature °C");
@@ -254,6 +278,6 @@ void loop() {
     if (now_connected) publishAll();
   }
 
-  handleBootButton();
+  effects.loop();   // draws the RGB strip and animates its effect
   delay(10);
 }

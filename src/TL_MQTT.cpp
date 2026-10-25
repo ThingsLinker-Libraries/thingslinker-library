@@ -89,6 +89,8 @@ static int              _rgbCbCount      = 0;
 static JoystickCallback _joystickCbs[MAX_SUBSCRIPTIONS];
 static int              _joystickCbCount = 0;
 
+static void (*_commandCb)(const char* cmd) = nullptr;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +114,9 @@ static unsigned long getTimestamp() {
 static String buildTopic(const char* widgetType, const char* pin) {
   return String("device/") + widgetType + "/" + _blueprintId + "/" + _authToken + "/" + pin + "/";
 }
+
+static String statusTopic()  { return "device/status/"  + _blueprintId + "/" + _authToken + "/"; }
+static String commandTopic() { return "device/command/" + _blueprintId + "/" + _authToken + "/"; }
 
 /** True once NTP has set the clock, i.e. getTimestamp() is real time. */
 static bool clockIsSet() {
@@ -194,12 +199,31 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   // Our own status topic. An OFFLINE there while we are connected is out of
   // date: the last will of an earlier connection of this device, delivered
   // late. Say ONLINE again so dashboards show the device as it is.
-  String statusTopic = "device/status/" + _blueprintId + "/" + _authToken + "/";
-  if (statusTopic == topic) {
-    if (strcmp(buf, "OFFLINE") == 0 && _mqtt.publish(statusTopic.c_str(), "ONLINE", true)) {
+  String ownStatus = statusTopic();
+  if (ownStatus == topic) {
+    if (strcmp(buf, "OFFLINE") == 0 && _mqtt.publish(ownStatus.c_str(), "ONLINE", true)) {
       _statusSentAt = millis();
       TL_LOG("[MQTT] ✓ Status → ONLINE (replaced an old OFFLINE)");
     }
+    return;
+  }
+
+  // A command from the app or portal, e.g. {"cmd":"reset_wifi","t":...}
+  if (commandTopic() == topic) {
+    if (length == 0 || !_commandCb) return;   // empty: our own clearing of the topic
+    JsonDocument cmdDoc;
+    if (deserializeJson(cmdDoc, buf) != DeserializationError::Ok) return;
+    const char* cmd = cmdDoc["cmd"] | "";
+    if (cmd[0] == '\0') return;
+    if (clockIsSet() && !cmdDoc["t"].isNull()) {
+      long age = (long)time(nullptr) - cmdDoc["t"].as<long>();
+      if (age > (long)TL_COMMAND_MAX_AGE_S || age < -(long)TL_COMMAND_MAX_AGE_S) {
+        TL_LOG("[MQTT] Ignored an out-of-date command: " + String(cmd));
+        return;
+      }
+    }
+    TL_LOG("[MQTT] Command received: " + String(cmd));
+    _commandCb(cmd);
     return;
   }
 
@@ -307,11 +331,11 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
   _mqtt.setKeepAlive(MQTT_KEEPALIVE);
   _mqtt.setBufferSize(MQTT_MAX_PACKET_SIZE);
 
-  String clientId   = "ThingsLinker_" + getChipID();
-  String statusTopic = "device/status/" + _blueprintId + "/" + _authToken + "/";
+  String clientId    = "ThingsLinker_" + getChipID();
+  String ownStatus   = statusTopic();
 
   TL_LOG("[MQTT] Client ID: " + clientId);
-  TL_LOG("[MQTT] Status topic: " + statusTopic);
+  TL_LOG("[MQTT] Status topic: " + ownStatus);
 
   bool ok;
   bool hasAuth = (mqttUsername && mqttUsername[0] != '\0') &&
@@ -323,13 +347,13 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
       clientId.c_str(),
       mqttUsername,
       mqttPassword,
-      statusTopic.c_str(), 0, true, "OFFLINE"
+      ownStatus.c_str(), 0, true, "OFFLINE"
     );
   } else {
     TL_LOG("[MQTT] Connecting anonymously...");
     ok = _mqtt.connect(
       clientId.c_str(),
-      statusTopic.c_str(), 0, true, "OFFLINE"
+      ownStatus.c_str(), 0, true, "OFFLINE"
     );
   }
 
@@ -357,11 +381,21 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
   }
 
   // Publish ONLINE status immediately (retained so dashboard sees it instantly)
-  _mqtt.publish(statusTopic.c_str(), "ONLINE", true);
+  _mqtt.publish(ownStatus.c_str(), "ONLINE", true);
   _statusSentAt = millis();
   // Follow our own status too, to answer an out-of-date OFFLINE (see onMqttMessage)
-  _mqtt.subscribe(statusTopic.c_str(), 1);
+  _mqtt.subscribe(ownStatus.c_str(), 1);
   TL_LOG("[MQTT] ✓ Status → ONLINE");
+
+  // Commands from the app and portal. Commands are sent once, never retained;
+  // clearing the topic before subscribing means a command someone did retain
+  // cannot reset the device again each time it connects.
+  if (_commandCb) {
+    String cmdTopic = commandTopic();
+    _mqtt.publish(cmdTopic.c_str(), "", true);
+    _mqtt.subscribe(cmdTopic.c_str(), 1);
+    TL_LOG("[MQTT] ✓ Listening for commands");
+  }
 
   // Re-subscribe all registered callbacks (required after every reconnect)
   for (int i = 0; i < _boolCbCount; i++) {
@@ -393,8 +427,14 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
   return true;
 }
 
+void onMQTTCommand(void (*callback)(const char* cmd)) {
+  _commandCb = callback;
+}
+
 void disconnectMQTT() {
   if (_mqtt.connected()) {
+    // A clean disconnect does not send the last will, so say OFFLINE ourselves
+    _mqtt.publish(statusTopic().c_str(), "OFFLINE", true);
     _mqtt.disconnect();
     TL_LOG("[MQTT] Disconnected");
   }
@@ -543,8 +583,7 @@ void loopMQTT() {
 
     // Repeat the retained ONLINE now and then (see TL_STATUS_REFRESH_MS)
     if (millis() - _statusSentAt >= TL_STATUS_REFRESH_MS) {
-      String statusTopic = "device/status/" + _blueprintId + "/" + _authToken + "/";
-      if (_mqtt.publish(statusTopic.c_str(), "ONLINE", true)) _statusSentAt = millis();
+      if (_mqtt.publish(statusTopic().c_str(), "ONLINE", true)) _statusSentAt = millis();
     }
   }
   // Note: reconnection is handled externally by ThingsLinker::checkConnections()

@@ -46,8 +46,6 @@ ThingsLinker iot(AUTH_TOKEN, BLUEPRINT_ID);
 
 // ── State ─────────────────────────────────────────────────────
 bool ledOn = false;
-unsigned long bootPressStart = 0;
-bool bootWasPressed = false;
 
 // ── Callbacks ─────────────────────────────────────────────────
 
@@ -71,7 +69,6 @@ void setup() {
   // Hardware setup
   pinMode(LED_PIN,  OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  pinMode(BOOT_PIN, INPUT_PULLUP);
 
   // 3× blink confirms power-on
   for (int i = 0; i < 3; i++) {
@@ -82,6 +79,10 @@ void setup() {
   // Initialise ThingsLinker.
   // • If no WiFi credentials are saved → BLE provisioning starts automatically.
   // • If credentials are saved → connects to WiFi + MQTT directly.
+  // Hold BOOT for 3 s to reset WiFi. Reset WiFi in the app or the User
+  // Portal does the same (turn that off with iot.remoteReset(false)).
+  iot.resetButton(BOOT_PIN);
+
   // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
   // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
   iot.begin();
@@ -97,21 +98,7 @@ void setup() {
 
 // ── Loop ──────────────────────────────────────────────────────
 void loop() {
-  iot.run();
-
-  // BOOT button: long press (> 3 s) → clear WiFi and re-provision
-  bool pressed = (digitalRead(BOOT_PIN) == LOW);
-  if (pressed && !bootWasPressed) {
-    bootWasPressed = true;
-    bootPressStart = millis();
-  }
-  if (!pressed && bootWasPressed) {
-    bootWasPressed = false;
-    if (millis() - bootPressStart >= 3000) {
-      Serial.println("[BOOT] Long press — resetting WiFi & restarting BLE...");
-      iot.resetWiFi();
-    }
-  }
+  iot.run();   // also watches the BOOT button (iot.resetButton)
 
   delay(10);
 }

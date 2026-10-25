@@ -150,6 +150,16 @@ void publishMQTT(const char* widgetType, const char* pin, const TLValue& value);
 void publishMQTTMap(const char* pin, float lat, float lng);
 
 /**
+ * @brief Receive device commands from the app and portal
+ *
+ * Subscribes to device/command/{BlueprintKey}/{AuthToken}/ on every connect.
+ * A command is {"cmd": "reset_wifi", "t": <unix time>}; it is never retained.
+ * The callback runs inside the MQTT loop: note the command and act on it
+ * later (ThingsLinker::run() does this for reset_wifi). Pass nullptr to stop.
+ */
+void onMQTTCommand(void (*callback)(const char* cmd));
+
+/**
  * @brief Process MQTT messages (call in loop)
  *
  * Example:

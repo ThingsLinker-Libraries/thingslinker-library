@@ -4,10 +4,20 @@
  */
 
 #include "ThingsLinker.h"
+#include <WiFi.h>
 
 // ── Global debug flag (controlled via iot.debug()) ───────────────────────────
 // Declared extern in TL_Config.h so all modules can read it via TL_LOG().
 bool _tlDebugEnabled = TL_DEBUG_DEFAULT;
+
+// Set by the MQTT command callback, acted on in run(): the reset restarts the
+// device, which must not happen in the middle of the MQTT client's own loop.
+static volatile bool _remoteResetRequested = false;
+
+static void onDeviceCommand(const char* cmd) {
+  if (strcmp(cmd, "reset_wifi") == 0) _remoteResetRequested = true;
+  else TL_LOG("[MQTT] Unknown command ignored: " + String(cmd));
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constructor
@@ -19,7 +29,12 @@ ThingsLinker::ThingsLinker(const char* authToken, const char* blueprintId)
     _mqttPassword(nullptr),
     _bleBrandName("ThingsLinker"),
     _initialized(false),
-    _lastCheck(0) {
+    _lastCheck(0),
+    _resetPin(-1),
+    _resetHoldMs(TL_RESET_HOLD_MS),
+    _resetActiveLow(true),
+    _resetPressedAt(0),
+    _remoteReset(true) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,6 +56,8 @@ void ThingsLinker::begin(const char* mqttUsername, const char* mqttPassword) {
   TL_LOG("Chip ID : " + getChipID());
   TL_LOG("Broker  : " MQTT_SERVER ":" + String(MQTT_PORT));
   TL_LOG("========================================\n");
+
+  onMQTTCommand(_remoteReset ? onDeviceCommand : nullptr);
 
   if (hasWiFiCredentials()) {
     if (!isSavedNetworkVisible()) {
@@ -80,7 +97,16 @@ void ThingsLinker::run() {
   // else while the app is setting up the device.
   if (isBLEActive()) return;
 
+  checkResetButton();
+
   loopMQTT();
+
+  if (_remoteResetRequested) {
+    _remoteResetRequested = false;
+    TL_LOG("[Reset] Reset WiFi requested from the app or portal");
+    resetWiFi();
+    return;
+  }
 
   // Lightweight connection health check every 5 s.
   unsigned long now = millis();
@@ -235,9 +261,57 @@ void ThingsLinker::resetWiFi() {
   TL_LOG("[Reset] Clearing WiFi credentials...");
   clearWiFiCredentials();
   disconnectMQTT();
+
+  // If WiFi (and the secure MQTT connection) ran in this boot, start setup
+  // mode from a clean restart. Starting Bluetooth on top of a WiFi stack that
+  // was in use left too little for the new WiFi connection, so the device
+  // received the new network but never joined it. With no network saved, the
+  // restart goes straight into setup mode, the same path as a first boot.
+  if (WiFi.getMode() != WIFI_OFF) {
+    TL_LOG("[Reset] Restarting into setup mode...");
+    delay(300);   // let the Serial line and the MQTT close go out
+    ESP.restart();
+  }
+
   disconnectWiFi();
   TL_LOG("[Reset] Starting BLE provisioning...");
   handleBLEProvisioning();
+}
+
+void ThingsLinker::resetButton(uint8_t pin, uint16_t holdMs, bool activeLow) {
+  _resetPin       = pin;
+  _resetHoldMs    = holdMs;
+  _resetActiveLow = activeLow;
+  _resetPressedAt = 0;
+  pinMode(pin, activeLow ? INPUT_PULLUP : INPUT_PULLDOWN);
+  TL_LOG("[Reset] Hold the button on GPIO " + String(pin) + " for " +
+         String(holdMs / 1000.0f, 1) + " s to reset WiFi");
+}
+
+void ThingsLinker::remoteReset(bool enable) {
+  _remoteReset = enable;
+  if (_initialized) onMQTTCommand(enable ? onDeviceCommand : nullptr);
+}
+
+// Called from run(): a long press of the reset button resets WiFi.
+void ThingsLinker::checkResetButton() {
+  if (_resetPin < 0) return;
+  bool pressed = digitalRead(_resetPin) == (_resetActiveLow ? LOW : HIGH);
+  if (!pressed) {
+    _resetPressedAt = 0;
+    return;
+  }
+  unsigned long now = millis();
+  if (_resetPressedAt == 0) {
+    _resetPressedAt = now ? now : 1;
+    TL_LOG("[Reset] Button pressed — keep holding to reset WiFi...");
+    return;
+  }
+  if (now - _resetPressedAt >= _resetHoldMs) {
+    _resetPressedAt = 0;
+    TL_LOG("[Reset] Button held — resetting WiFi");
+    resetWiFi();
+  }
 }
 
 void ThingsLinker::debug(bool enable) {

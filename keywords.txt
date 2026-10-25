@@ -78,6 +78,8 @@ getChipID	KEYWORD2
 #######################################
 
 resetWiFi	KEYWORD2
+resetButton	KEYWORD2
+remoteReset	KEYWORD2
 offlineStorage	KEYWORD2
 setPowerKeyActiveLow	KEYWORD2
 offlineCount	KEYWORD2

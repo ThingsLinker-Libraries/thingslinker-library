@@ -524,10 +524,43 @@ public:
   void setBLEName(const char* brandName);
 
   /**
-   * Clear saved WiFi credentials and restart BLE provisioning.
+   * Clear the saved WiFi network and go into Bluetooth setup mode.
    * Useful for a factory-reset button or changing networks.
+   *
+   * If WiFi was in use, the device restarts (setup mode then begins on a clean
+   * boot, which is what makes the new network connect reliably), so code after
+   * this call does not run in that case.
+   *
+   * The same reset also happens when the user holds the reset button (see
+   * resetButton()) or chooses Reset WiFi in the app or the User Portal (see
+   * remoteReset()).
    */
   void resetWiFi();
+
+  /**
+   * Use a button on the device to reset its WiFi: holding it for holdMs
+   * calls resetWiFi(). run() checks the button, so nothing else is needed.
+   *
+   * @param pin        GPIO of the button (default 0, the BOOT button on most ESP32 boards)
+   * @param holdMs     how long it must be held, in ms (default 3000)
+   * @param activeLow  true when pressing connects the pin to GND (the usual
+   *                   wiring; the internal pull-up is turned on)
+   *
+   * Example:
+   *   iot.resetButton();        // hold BOOT (GPIO 0) for 3 s
+   *   iot.resetButton(41);      // a button on GPIO 41
+   *   iot.begin();
+   */
+  void resetButton(uint8_t pin = 0, uint16_t holdMs = TL_RESET_HOLD_MS, bool activeLow = true);
+
+  /**
+   * Allow or refuse Reset WiFi from the app and the User Portal.
+   * On by default. Call before begin().
+   *
+   * Example:
+   *   iot.remoteReset(false);   // only the button on the device can reset WiFi
+   */
+  void remoteReset(bool enable);
 
   /**
    * Enable or disable library debug output on Serial.
@@ -547,8 +580,15 @@ private:
   bool          _initialized;
   unsigned long _lastCheck;
 
+  int16_t       _resetPin;        // -1 = no reset button
+  uint16_t      _resetHoldMs;
+  bool          _resetActiveLow;
+  unsigned long _resetPressedAt;  // 0 = not pressed
+  bool          _remoteReset;
+
   void handleBLEProvisioning();
   void checkConnections();
+  void checkResetButton();
 };
 
 #endif // THINGSLINKER_H

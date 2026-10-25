@@ -32,6 +32,7 @@ Both use the **exact same widget API** — `gauge()`, `onSwitch()`, `run()` etc.
 
 - [WiFi Variant — ThingsLinker](#wifi-variant--thingslinker)
   - [Quick Start](#quick-start-wifi)
+  - [Reset WiFi](#reset-wifi)
   - [Widget Examples (WiFi)](#widget-examples-wifi)
 - [GSM Variant — ThingsLinkerGSM](#gsm-variant--thingslinkergsmm)
   - [Quick Start (GSM)](#quick-start-gsm)
@@ -80,6 +81,35 @@ void loop() {
 
 **First boot:** BLE starts automatically. Open the ThingsLinker app → find your device → enter WiFi credentials.
 **Every boot after:** Connects to WiFi and MQTT automatically.
+
+---
+
+### Reset WiFi
+
+When the user changes their router, the device must forget its network and go back into setup mode. There are three ways, and they all do the same thing (`iot.resetWiFi()`): the saved network is erased, the device restarts into Bluetooth setup mode, and it is given a new network the same way as on its first boot.
+
+| From | How | Needs |
+|------|-----|-------|
+| **The device** | Hold the reset button for 3 seconds | `iot.resetButton()` in `setup()` |
+| **The app** | Open the device, tap **WiFi**, then **Reset** | The device online; on by default |
+| **The User Portal** | **Change WiFi** on the device card, then **Reset device WiFi** | The device online; on by default |
+
+```cpp
+void setup() {
+  iot.resetButton();          // hold BOOT (GPIO 0) for 3 s
+  // iot.resetButton(41);     // or a button of your own on GPIO 41
+  // iot.resetButton(41, 5000, false);  // held 5 s, button wired to 3.3 V
+  // iot.remoteReset(false);  // refuse Reset WiFi from the app and portal
+  iot.begin();
+}
+```
+
+`iot.run()` watches the button and receives the app's command, so nothing else is needed in `loop()`.
+
+- **Erasing:** the network name and password are deleted from the device's flash, including the copy the ESP32's WiFi driver kept in firmware built with older versions of the library. Your own data (`iot.saveInt()` and the like) is kept.
+- **The app and portal** can only reach a device that is online. An offline device is reset with its button.
+- **How the command travels:** the server sends `{"cmd":"reset_wifi","t":<unix time>}` once (not retained) to `device/command/{BlueprintKey}/{AuthToken}/`, after checking that the user owns the device. The library ignores a command more than 2 minutes old and clears that topic each time it connects, so an old command can never reset the device later.
+- **GSM devices** have no WiFi, so `ThingsLinkerGSM` has no reset, and the app and portal do not offer one for them.
 
 ---
 
@@ -190,12 +220,18 @@ iot.onRGB("V1", [](uint8_t r, uint8_t g, uint8_t b,
   // r, g, b   = color (0–255 each)
   // on         = strip on or off
   // count      = number of LEDs (set in app)
-  // pattern    = effect name e.g. "Solid", "Blink"
+  // pattern    = effect name from the widget's Effect list,
+  //              e.g. "Default", "Blinking", "Rainbow Cycle"
 
   Serial.printf("Color: R%d G%d B%d  On:%s\n", r, g, b, on ? "yes" : "no");
   // drive your NeoPixel / FastLED strip here
 });
 ```
+
+For a NeoPixel strip, the `07_All_Widgets_Test` and `08_ESP32S3_Full_Dashboard`
+examples include `RGBEffects.h`: it draws every effect in the widget's list
+without blocking `loop()`, and gamma-corrects the colour so the LEDs match the
+colour shown in the app. Copy it into your sketch folder to use it.
 
 ---
 
@@ -858,6 +894,14 @@ A device listens on the pins it publishes to, and MQTT delivers its own messages
 | `iot.signalQuality()` | `int` | GSM signal 0–31 *(GSM only)* |
 | `iot.getChipID()` | `String` | Unique chip ID |
 
+### WiFi reset functions *(WiFi only)*
+
+| Function | Description |
+|----------|-------------|
+| `iot.resetWiFi()` | Erase the saved network now and restart into setup mode |
+| `iot.resetButton(pin = 0, holdMs = 3000, activeLow = true)` | Reset WiFi when the button is held (see [Reset WiFi](#reset-wifi)) |
+| `iot.remoteReset(enable)` | Allow (default) or refuse Reset WiFi from the app and portal |
+
 ### Virtual Pins
 
 Use `"V0"` through `"V124"` (125 pins total). Assign each pin to a widget in the Organisation Portal dashboard.
@@ -922,7 +966,8 @@ Leave both out (or pass `""`) to connect without a login. Sketches written for o
 | Symptom | Fix |
 |---------|-----|
 | Device not visible in BLE scan | Restart ESP32; check no other BLE client is connected |
-| WiFi fails every boot | Confirm SSID is 2.4 GHz; call `iot.resetWiFi()` to re-provision |
+| WiFi fails every boot | Confirm SSID is 2.4 GHz; hold the reset button (`iot.resetButton()`) to set it up again |
+| Reset WiFi in the app says the device is offline | The command can only reach a connected device: hold the reset button instead |
 | MQTT login refused (state 4 or 5) | Only happens with an MQTT username/password: the ThingsLinker broker needs none, so call `iot.begin()` without them |
 | MQTT connect failed (state -2) | Check internet access; confirm port 8883 is not blocked |
 

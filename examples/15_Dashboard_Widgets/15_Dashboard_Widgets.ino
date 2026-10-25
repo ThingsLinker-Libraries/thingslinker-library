@@ -83,8 +83,6 @@ const unsigned long PUBLISH_INTERVAL = 5000;
 
 unsigned long lastPublish    = 0;
 bool          wasConnected   = false;
-unsigned long bootPressStart = 0;
-bool          bootWasPressed = false;
 
 
 // ── Callbacks: App → Device ──────────────────────────────────
@@ -157,19 +155,6 @@ void publishSettings() {
   iot.numberInput(PIN_SETPOINT, setpoint);
 }
 
-// ── BOOT button: hold >3 s → reset WiFi ──────────────────────
-void handleBootButton() {
-  bool pressed = (digitalRead(BOOT_PIN) == LOW);
-  if (pressed && !bootWasPressed) { bootWasPressed = true; bootPressStart = millis(); }
-  if (!pressed && bootWasPressed) {
-    bootWasPressed = false;
-    if (millis() - bootPressStart >= 3000) {
-      Serial.println("[BOOT] Long press — resetting WiFi...");
-      iot.resetWiFi();
-    }
-  }
-}
-
 // ── Setup ─────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
@@ -179,7 +164,9 @@ void setup() {
   Serial.println(  "║   ThingsLinker — Dashboard Widgets       ║");
   Serial.println(  "╚══════════════════════════════════════════╝\n");
 
-  pinMode(BOOT_PIN, INPUT_PULLUP);
+  // Hold BOOT for 3 s to reset WiFi. Reset WiFi in the app or the User
+  // Portal does the same (turn that off with iot.remoteReset(false)).
+  iot.resetButton(BOOT_PIN);
 
   // No MQTT login is needed for the ThingsLinker broker. Optional: if your own
   // broker asks for one, use iot.begin("MQTT_USERNAME", "MQTT_PASSWORD");
@@ -230,6 +217,5 @@ void loop() {
     publishAll();
   }
 
-  handleBootButton();
   delay(10);
 }

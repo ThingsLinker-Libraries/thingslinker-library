@@ -51,6 +51,7 @@
 
 #include <ThingsLinker.h>
 #include <Adafruit_NeoPixel.h>   // Install: Arduino Library Manager → "Adafruit NeoPixel"
+#include "RGBEffects.h"          // colour correction and the RGB widget's effects (this folder)
 
 // ── Credentials ──────────────────────────────────────────────
 const char* AUTH_TOKEN   = "9a1977dd443b7d1f0ff4cbdaa4cbf05e1376b786dcf1da344d06a0d8df46845f";
@@ -74,8 +75,14 @@ const char* BLUEPRINT_ID = "BLUEbV7N2u5diuUi";
 // MAX_BRIGHTNESS to 100.
 #define MAX_BRIGHTNESS  30  // 0–100 %; raise only with external 5 V power
 
+// ── Colour order ─────────────────────────────────────────────
+// Most WS2812 strips are GRB. If red shows as green (and green as
+// red), change this to NEO_RGB.
+#define RGB_COLOR_ORDER NEO_GRB
+
 // ── NeoPixel strip ───────────────────────────────────────────
-Adafruit_NeoPixel strip(RGB_LED_COUNT, RGB_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip(RGB_LED_COUNT, RGB_PIN, RGB_COLOR_ORDER + NEO_KHZ800);
+RGBEffects        effects(strip);
 
 // ── ThingsLinker ─────────────────────────────────────────────
 ThingsLinker iot(AUTH_TOKEN, BLUEPRINT_ID);
@@ -87,6 +94,7 @@ uint8_t rgbG      = 255;
 uint8_t rgbB      = 255;
 float    brightness  = 50.0f;  // 0–100 %
 uint16_t pixelCount  = RGB_LED_COUNT; // number of LEDs to light (set from app RGB widget)
+String   rgbPattern  = "Default";     // effect picked in the RGB widget
 
 // ── App → Device state ────────────────────────────────────────
 float timerSecs  = 0.0f;
@@ -128,17 +136,10 @@ bool _prevMQTTConnected = false;
 // publishes again → infinite rapid loop.
 // ─────────────────────────────────────────────────────────────
 void applyRGB(bool publishLed = true) {
-  strip.clear();  // always clear first so unused pixels go dark
-  if (rgbOn) {
-    float capped = brightness > MAX_BRIGHTNESS ? MAX_BRIGHTNESS : brightness;
-    float scale  = capped / 100.0f;
-    uint8_t r = (uint8_t)(rgbR * scale);
-    uint8_t g = (uint8_t)(rgbG * scale);
-    uint8_t b = (uint8_t)(rgbB * scale);
-    uint16_t cnt = (pixelCount < RGB_LED_COUNT) ? pixelCount : RGB_LED_COUNT;
-    strip.fill(strip.Color(r, g, b), 0, cnt);
-  }
-  strip.show();
+  // RGBEffects draws the strip from loop(): colour (gamma-corrected so it
+  // matches the app), LED count, effect, and brightness capped for USB power.
+  float capped = brightness > MAX_BRIGHTNESS ? MAX_BRIGHTNESS : brightness;
+  effects.set(rgbR, rgbG, rgbB, rgbOn, pixelCount, rgbPattern.c_str(), capped);
 
   // V5 — LED widget: mirror on/off state back to the app
   if (publishLed) {
@@ -192,7 +193,8 @@ void onLEDToggle(bool on) {
 //    r, g, b = color channels 0–255
 //    status  = "ON" / "OFF"
 //    count   = number of LEDs to light (1–300)
-//    pattern = effect name e.g. "Solid", "Blink"
+//    pattern = effect name from the widget's Effect list, e.g.
+//              "Default", "Blinking", "Rainbow Cycle", "Fire Effect"
 //
 //  iot.onRGB() subscribes to the "RGB" topic and decodes all fields.
 // ─────────────────────────────────────────────────────────────
@@ -202,11 +204,13 @@ void onRGBColor(uint8_t r, uint8_t g, uint8_t b, bool on, uint16_t count, const 
   rgbB       = b;
   rgbOn      = on;
   pixelCount = count;
+  rgbPattern = pattern ? pattern : "Default";
   iot.saveInt ("rgb_r",   r);
   iot.saveInt ("rgb_g",   g);
   iot.saveInt ("rgb_b",   b);
   iot.saveBool("rgb_on",  on);
   iot.saveInt ("rgb_cnt", count);
+  iot.saveString("rgb_pat", rgbPattern);
   applyRGB();
   Serial.printf("[V6 RGB] R:%d  G:%d  B:%d  Strip:%s  Count:%d  Pattern:%s\n",
                 rgbR, rgbG, rgbB, rgbOn ? "ON" : "OFF", pixelCount, pattern);
@@ -374,7 +378,7 @@ void setup() {
   // All App→Device widgets are covered:
   //   V0  Button  → roomLightOn
   //   V5  LED     → rgbOn
-  //   V6  RGB     → rgbR, rgbG, rgbB, rgbOn, pixelCount
+  //   V6  RGB     → rgbR, rgbG, rgbB, rgbOn, pixelCount, rgbPattern
   //   V7  Slider  → brightness
   //   V8  Switch  → rgbOn
   //   V10 Timer   → timerSecs
@@ -384,6 +388,7 @@ void setup() {
   rgbB        = (uint8_t)iot.getInt  ("rgb_b",      255);
   rgbOn       =           iot.getBool ("rgb_on",      false);
   pixelCount  = (uint16_t)iot.getInt  ("rgb_cnt",     RGB_LED_COUNT);
+  rgbPattern  =           iot.getString("rgb_pat",    "Default");
   brightness  =           iot.getFloat("brightness",  50.0f);
   timerSecs   =           iot.getFloat("timer_secs",  0.0f);
   applyRGB();  // apply restored RGB state to strip immediately
@@ -457,6 +462,9 @@ void loop() {
       sendSensorData();
     }
   }
+
+  // Draw the RGB strip (animates the selected effect)
+  effects.loop();
 
   // Poll physical button
   handleButton();

@@ -14,7 +14,7 @@
  *                           removeKey, clearAllData
  *    - Status API           wifiConnected, mqttConnected, bleActive,
  *                           getIP, getChipID
- *    - resetWiFi()          Long-press BOOT button (>3 s)
+ *    - resetButton()        Hold BOOT (>3 s) to reset WiFi (also from the app/portal)
  *    - NTP timestamp        Printed at first valid sync
  *
  *  No real sensors needed — all values are simulated.
@@ -87,8 +87,6 @@ float batteryPct  = 85.0f;   // V10 slider (%)
 // ── Timing ───────────────────────────────────────────────────
 unsigned long lastPublish    = 0;
 unsigned long lastStatusPrint = 0;
-unsigned long bootPressStart = 0;
-bool          bootWasPressed = false;
 bool          ntpReported    = false;   // Print NTP sync once
 bool          heartbeat      = false;   // V9 toggle
 bool          _prevMQTTConn  = false;   // Reconnect detection
@@ -277,31 +275,6 @@ void storageTest() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// BOOT button: long-press >3 s clears WiFi and restarts BLE
-// ─────────────────────────────────────────────────────────────
-void handleBootButton() {
-  bool pressed = (digitalRead(BOOT_PIN) == LOW);
-
-  if (pressed && !bootWasPressed) {
-    bootWasPressed = true;
-    bootPressStart = millis();
-  }
-
-  if (!pressed && bootWasPressed) {
-    unsigned long held = millis() - bootPressStart;
-    bootWasPressed = false;
-
-    if (held >= 3000) {
-      Serial.println("\n[BOOT] Long press detected — clearing WiFi credentials...");
-      Serial.println("[BOOT] Open the ThingsLinker app to re-provision this device.");
-      iot.resetWiFi();
-    } else {
-      Serial.println("[BOOT] Short press (" + String(held) + " ms) — hold >3 s to reset WiFi");
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
 // Setup
 // ─────────────────────────────────────────────────────────────
 void setup() {
@@ -316,7 +289,6 @@ void setup() {
   // Hardware init
   pinMode(LED_PIN,  OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  pinMode(BOOT_PIN, INPUT_PULLUP);
 
   // 3× blink — confirms power-on
   for (int i = 0; i < 3; i++) {
@@ -331,6 +303,10 @@ void setup() {
 
   // ── Optional: disable debug output for production builds ────
   // iot.debug(false);   // Uncomment to silence all library Serial output
+
+  // Hold BOOT for 3 s to reset WiFi. Reset WiFi in the app or the User
+  // Portal does the same (turn that off with iot.remoteReset(false)).
+  iot.resetButton(BOOT_PIN);
 
   // ── Start ThingsLinker ──────────────────────────────────────
   // Handles BLE provisioning (first boot) or auto WiFi + MQTT connect.
@@ -407,9 +383,6 @@ void loop() {
     lastStatusPrint = now;
     printStatus();
   }
-
-  // Check BOOT button for WiFi reset
-  handleBootButton();
 
   delay(10);
 }

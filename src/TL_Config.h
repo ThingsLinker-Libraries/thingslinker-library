@@ -85,6 +85,20 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 #endif
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Device commands (Reset WiFi from the app or portal)
+// ─────────────────────────────────────────────────────────────────────────────
+// A command older than this (seconds, by the command's own "t") is ignored,
+// so one held back by the network or the broker cannot act much later.
+// Only checked once the device's clock is set.
+#ifndef TL_COMMAND_MAX_AGE_S
+  #define TL_COMMAND_MAX_AGE_S 120
+#endif
+// How long the reset button must be held by default (ms): iot.resetButton().
+#ifndef TL_RESET_HOLD_MS
+  #define TL_RESET_HOLD_MS 3000
+#endif
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Subscriptions
 // ─────────────────────────────────────────────────────────────────────────────
 // Maximum number of widget pins the library will hold callbacks for.

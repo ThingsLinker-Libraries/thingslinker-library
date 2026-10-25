@@ -48,6 +48,9 @@ static void startNTP() {
 bool connectWiFi(const char* ssid, const char* password, bool saveCredentials) {
   TL_LOG("[WiFi] Connecting to: " + String(ssid));
 
+  // The library keeps the network in its own storage. Without this the WiFi
+  // driver would keep a second copy of the password in flash.
+  WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
@@ -108,6 +111,9 @@ void clearWiFiCredentials() {
   _prefs.begin("thingslinker", false);
   _prefs.clear();
   _prefs.end();
+  // Also wipe the WiFi driver's own copy, which firmware built with an older
+  // version of the library may have saved. Needs the WiFi station running.
+  if (WiFi.getMode() & WIFI_STA) WiFi.disconnect(false, true);
   TL_LOG("[WiFi] ✓ Credentials cleared");
 #endif
 }
