@@ -84,6 +84,13 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
   #define TL_STATUS_REFRESH_MS (6UL * 60UL * 60UL * 1000UL)
 #endif
 
+// An out-of-date OFFLINE on the device's own status topic is answered with
+// ONLINE, at most once in this time (ms). A burst of OFFLINEs gets one answer.
+// Keep it well under the backend's wait (OFFLINE_CONFIRM_SECONDS, 5 s).
+#ifndef TL_STATUS_ANSWER_GAP_MS
+  #define TL_STATUS_ANSWER_GAP_MS 2000UL
+#endif
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Device commands (Reset WiFi from the app or portal)
 // ─────────────────────────────────────────────────────────────────────────────

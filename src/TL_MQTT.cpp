@@ -125,6 +125,7 @@ static bool clockIsSet() {
 
 static unsigned long _connectedAt   = 0;   // millis() of the last successful connect
 static unsigned long _statusSentAt  = 0;   // millis() ONLINE was last published
+static bool          _offlineSeen   = false; // an OFFLINE to answer (see onMqttMessage)
 static unsigned long _lastStoredSend = 0;  // millis() a stored reading was last sent
 
 /**
@@ -198,13 +199,10 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   // Our own status topic. An OFFLINE there while we are connected is out of
   // date: the last will of an earlier connection of this device, delivered
-  // late. Say ONLINE again so dashboards show the device as it is.
-  String ownStatus = statusTopic();
-  if (ownStatus == topic) {
-    if (strcmp(buf, "OFFLINE") == 0 && _mqtt.publish(ownStatus.c_str(), "ONLINE", true)) {
-      _statusSentAt = millis();
-      TL_LOG("[MQTT] ✓ Status → ONLINE (replaced an old OFFLINE)");
-    }
+  // late. Say ONLINE again so dashboards show the device as it is; loopMQTT()
+  // does that, once for a burst (see TL_STATUS_ANSWER_GAP_MS).
+  if (statusTopic() == topic) {
+    if (strcmp(buf, "OFFLINE") == 0) _offlineSeen = true;
     return;
   }
 
@@ -383,6 +381,7 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
   // Publish ONLINE status immediately (retained so dashboard sees it instantly)
   _mqtt.publish(ownStatus.c_str(), "ONLINE", true);
   _statusSentAt = millis();
+  _offlineSeen = false;
   // Follow our own status too, to answer an out-of-date OFFLINE (see onMqttMessage)
   _mqtt.subscribe(ownStatus.c_str(), 1);
   TL_LOG("[MQTT] ✓ Status → ONLINE");
@@ -580,6 +579,15 @@ void loopMQTT() {
   if (_mqtt.connected()) {
     _mqtt.loop();
     sendStoredReadings();
+
+    // Answer an out-of-date OFFLINE
+    if (_offlineSeen && millis() - _statusSentAt >= TL_STATUS_ANSWER_GAP_MS) {
+      if (_mqtt.publish(statusTopic().c_str(), "ONLINE", true)) {
+        _statusSentAt = millis();
+        _offlineSeen = false;
+        TL_LOG("[MQTT] ✓ Status → ONLINE (replaced an old OFFLINE)");
+      }
+    }
 
     // Repeat the retained ONLINE now and then (see TL_STATUS_REFRESH_MS)
     if (millis() - _statusSentAt >= TL_STATUS_REFRESH_MS) {

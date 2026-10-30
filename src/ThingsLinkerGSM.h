@@ -388,6 +388,7 @@ private:
   unsigned long _mqttConnectedAt;   // millis() of the last successful MQTT connect
   unsigned long _lastStoredSend;    // millis() a stored reading was last sent
   unsigned long _statusSentAt;      // millis() ONLINE was last published
+  bool          _offlineSeen;       // an OFFLINE to answer (see _dispatchMessage)
 
   // ── Callback tables ─────────────────────────────────────────────────────────
   FloatCb _floatCbs[MAX_SUBSCRIPTIONS];

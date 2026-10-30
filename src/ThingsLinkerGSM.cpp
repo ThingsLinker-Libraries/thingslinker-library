@@ -60,6 +60,7 @@ ThingsLinkerGSM::ThingsLinkerGSM(HardwareSerial& serial,
   _rxQueueHead  = 0;
   _rxQueueCount = 0;
   _statusSentAt = 0;
+  _offlineSeen  = false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,6 +169,16 @@ void ThingsLinkerGSM::run() {
 
   // Readings stored while offline go out one at a time once connected
   _sendStoredReadings();
+
+  // Answer an out-of-date OFFLINE
+  if (_mqttOk && _offlineSeen && millis() - _statusSentAt >= TL_STATUS_ANSWER_GAP_MS) {
+    String statusTopic = "device/status/" + String(_blueprintId) + "/" + String(_authToken) + "/";
+    if (_mqttPublishAT(statusTopic.c_str(), "ONLINE", true)) {
+      _statusSentAt = millis();
+      _offlineSeen = false;
+      TL_LOG("[MQTT] Status → ONLINE (replaced an old OFFLINE)");
+    }
+  }
 
   // Repeat the retained ONLINE now and then (see TL_STATUS_REFRESH_MS)
   if (_mqttOk && now - _statusSentAt >= TL_STATUS_REFRESH_MS) {
@@ -594,6 +605,7 @@ bool ThingsLinkerGSM::_connectMQTT() {
     // the retained "OFFLINE" from the last will would stay on the broker.
     _mqttPublishAT(statusTopic.c_str(), "ONLINE", true);
     _statusSentAt = millis();
+    _offlineSeen  = false;
     TL_LOG("[MQTT] Status → ONLINE");
   }
 
@@ -846,13 +858,11 @@ void ThingsLinkerGSM::_dispatchMessage(const char* topic, const char* payload) {
   // Our own status topic. An OFFLINE there while we are connected is out of
   // date: the last will of an earlier connection of this device (for example
   // a session the modem kept open across an ESP32 restart), delivered late.
-  // Say ONLINE again so dashboards show the device as it is.
+  // Say ONLINE again so dashboards show the device as it is; loop() does that,
+  // once for a burst (see TL_STATUS_ANSWER_GAP_MS).
   String statusTopic = "device/status/" + String(_blueprintId) + "/" + String(_authToken) + "/";
   if (statusTopic == topic) {
-    if (strcmp(payload, "OFFLINE") == 0 && _mqttPublishAT(statusTopic.c_str(), "ONLINE", true)) {
-      _statusSentAt = millis();
-      TL_LOG("[MQTT] Status → ONLINE (replaced an old OFFLINE)");
-    }
+    if (strcmp(payload, "OFFLINE") == 0) _offlineSeen = true;
     return;
   }
 
