@@ -101,6 +101,8 @@ void ThingsLinker::run() {
 
   loopMQTT();
 
+  serviceOTA();
+
   if (_remoteResetRequested) {
     _remoteResetRequested = false;
     TL_LOG("[Reset] Reset WiFi requested from the app or portal");
@@ -248,6 +250,28 @@ uint16_t ThingsLinker::offlineCount() { return tlOfflineCount(); }
 // ─────────────────────────────────────────────────────────────────────────────
 OTAResult ThingsLinker::checkOTA(const char* apiServer) {
   return checkAndApplyOTA(_authToken, apiServer);
+}
+
+void ThingsLinker::enableOTA(const char* apiServer) {
+  _otaEnabled = true;
+  _otaServer  = apiServer;
+  // First safety-net check 1-5 min after start-up, spread so a fleet that
+  // powers up together does not ask the server all at once.
+  _otaNextAt  = millis() + 60000UL + (unsigned long)random(240000L);
+  enableOTADoorbell();
+  TL_LOG("[OTA] Automatic updates on (MQTT doorbell + safety-net check)");
+}
+
+void ThingsLinker::serviceOTA() {
+  if (!_otaEnabled || !wifiConnected()) return;
+  bool rung = takeOTADoorbell();
+  bool due  = (long)(millis() - _otaNextAt) >= 0;
+  if (!rung && !due) return;
+  TL_LOG(rung ? "[OTA] Doorbell rang — checking for an update"
+              : "[OTA] Safety-net check for an update");
+  _otaNextAt = millis() + TL_OTA_SAFETY_CHECK_MS
+               + (unsigned long)random((long)(TL_OTA_SAFETY_CHECK_MS / 10UL) + 1L);
+  checkOTA(_otaServer);   // restarts the device on success
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

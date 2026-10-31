@@ -117,6 +117,7 @@ static String buildTopic(const char* widgetType, const char* pin) {
 
 static String statusTopic()  { return "device/status/"  + _blueprintId + "/" + _authToken + "/"; }
 static String commandTopic() { return "device/command/" + _blueprintId + "/" + _authToken + "/"; }
+static String otaTopic()     { return "device/ota/"     + _blueprintId + "/" + _authToken + "/"; }
 
 /** True once NTP has set the clock, i.e. getTimestamp() is real time. */
 static bool clockIsSet() {
@@ -126,6 +127,8 @@ static bool clockIsSet() {
 static unsigned long _connectedAt   = 0;   // millis() of the last successful connect
 static unsigned long _statusSentAt  = 0;   // millis() ONLINE was last published
 static bool          _offlineSeen   = false; // an OFFLINE to answer (see onMqttMessage)
+static bool          _otaListen     = false; // follow the OTA doorbell (enableOTADoorbell)
+static bool          _otaRung       = false; // the doorbell rang; takeOTADoorbell() reads it
 static unsigned long _lastStoredSend = 0;  // millis() a stored reading was last sent
 
 /**
@@ -203,6 +206,13 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   // does that, once for a burst (see TL_STATUS_ANSWER_GAP_MS).
   if (statusTopic() == topic) {
     if (strcmp(buf, "OFFLINE") == 0) _offlineSeen = true;
+    return;
+  }
+
+  // OTA doorbell: the server says "check for an update". It carries nothing
+  // else; the update itself always comes from the HTTPS API. Empty = cleared.
+  if (otaTopic() == topic) {
+    if (length > 0) _otaRung = true;
     return;
   }
 
@@ -386,6 +396,9 @@ bool connectMQTT(const char* authTokenParam, const char* blueprintIdParam,
   _mqtt.subscribe(ownStatus.c_str(), 1);
   TL_LOG("[MQTT] ✓ Status → ONLINE");
 
+  // OTA doorbell (retained, so one rung while we were offline arrives now)
+  if (_otaListen) _mqtt.subscribe(otaTopic().c_str(), 1);
+
   // Commands from the app and portal. Commands are sent once, never retained;
   // clearing the topic before subscribing means a command someone did retain
   // cannot reset the device again each time it connects.
@@ -437,6 +450,17 @@ void disconnectMQTT() {
     _mqtt.disconnect();
     TL_LOG("[MQTT] Disconnected");
   }
+}
+
+void enableOTADoorbell() {
+  _otaListen = true;
+  if (_mqtt.connected()) _mqtt.subscribe(otaTopic().c_str(), 1);
+}
+
+bool takeOTADoorbell() {
+  bool rung = _otaRung;
+  _otaRung = false;
+  return rung;
 }
 
 bool isMQTTConnected() {

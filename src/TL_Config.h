@@ -172,4 +172,10 @@ extern bool _tlDebugEnabled;  // Defined in ThingsLinker.cpp
 // Unix epoch threshold for NTP validity check: 2020-01-01 00:00:00 UTC
 #define NTP_VALID_EPOCH 1577836800UL
 
+// OTA with iot.enableOTA(): besides the MQTT doorbell, check the API this often
+// (plus up to 10 % random) in case a doorbell was missed. 12 hours.
+#ifndef TL_OTA_SAFETY_CHECK_MS
+  #define TL_OTA_SAFETY_CHECK_MS (12UL * 60UL * 60UL * 1000UL)
+#endif
+
 #endif // TL_CONFIG_H

@@ -50,6 +50,16 @@ void disconnectMQTT();
 bool isMQTTConnected();
 
 /**
+ * @brief Follow the OTA doorbell topic device/ota/{blueprint}/{token}/
+ * The server rings it (retained) when this device has an update to make.
+ * Used by iot.enableOTA(); see TL_OTA.h.
+ */
+void enableOTADoorbell();
+
+/** @brief true once after the OTA doorbell rang */
+bool takeOTADoorbell();
+
+/**
  * @brief Subscribe to a pin (to receive control from app)
  * @param widgetType Widget type (Button, Switch, Slider, Gauge, etc.)
  * @param pin Virtual pin (V0 to V124 supported - 125 pins total)

@@ -507,6 +507,20 @@ public:
    */
   OTAResult checkOTA(const char* apiServer = TL_API_SERVER);
 
+  /**
+   * Install OTA updates automatically, without checking every minute.
+   *
+   * The server rings an MQTT doorbell when this device has an update; run()
+   * then asks the API (HTTPS) and installs it. As a safety net run() also
+   * checks every TL_OTA_SAFETY_CHECK_MS (12 h, plus a random spread) and once
+   * a few minutes after start-up. Call once in setup(), after begin().
+   *
+   * Example:
+   *   iot.begin();
+   *   iot.enableOTA();
+   */
+  void enableOTA(const char* apiServer = TL_API_SERVER);
+
   // ── Advanced ────────────────────────────────────────────────────────────────
 
   /**
@@ -579,6 +593,9 @@ private:
   const char*   _bleBrandName;   // Custom BLE prefix (default: "ThingsLinker")
   bool          _initialized;
   unsigned long _lastCheck;
+  bool          _otaEnabled = false;
+  const char*   _otaServer  = nullptr;
+  unsigned long _otaNextAt  = 0;     // millis() of the next safety-net check
 
   int16_t       _resetPin;        // -1 = no reset button
   uint16_t      _resetHoldMs;
@@ -587,6 +604,7 @@ private:
   bool          _remoteReset;
 
   void handleBLEProvisioning();
+  void serviceOTA();                 ///< OTA doorbell + safety-net check (see enableOTA)
   void checkConnections();
   void checkResetButton();
 };
