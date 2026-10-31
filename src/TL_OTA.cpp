@@ -19,11 +19,21 @@
 // Internal helper — report OTA status back to the backend
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Shared plain-HTTP client for all REST calls ───────────────────────────────
-// A single persistent WiFiClient avoids the cost of creating a new TCP socket
-// on every check/status call, and works reliably alongside the TLS-based MQTT
-// connection because it uses plain TCP (not SSL) independently.
-static WiFiClient _otaHttpClient;
+// ── Clients for the REST calls (check, status) ────────────────────────────────
+// The server address decides: https:// (the live API) needs TLS, while
+// http:// (a server on the LAN) is plain TCP. Sending plain HTTP to an https
+// server's port gets a 404 from its proxy, so the check would always fail.
+static WiFiClient       _otaHttpClient;
+static WiFiClientSecure _otaHttpsClient;
+
+static bool _otaBegin(HTTPClient& http, const String& url)
+{
+  if (url.startsWith("https")) {
+    _otaHttpsClient.setInsecure();   // same as the firmware download below
+    return http.begin(_otaHttpsClient, url);
+  }
+  return http.begin(_otaHttpClient, url);
+}
 
 static bool _otaReportStatus(const char* authToken,
                               const char* apiServer,
@@ -35,9 +45,9 @@ static bool _otaReportStatus(const char* authToken,
   HTTPClient http;
   String url = String(apiServer) + "/api/v1/org/ota/device/update-status/";
 
-  // Explicitly pass WiFiClient — avoids the deprecated single-arg http.begin()
-  // which can fail silently when a WiFiClientSecure (MQTT TLS) is also active.
-  if (!http.begin(_otaHttpClient, url)) {
+  // Explicit client — the deprecated single-arg http.begin() can fail silently
+  // when a WiFiClientSecure (MQTT TLS) is also active.
+  if (!_otaBegin(http, url)) {
     TL_LOG("[OTA] reportStatus: http.begin failed");
     return false;
   }
@@ -76,9 +86,9 @@ OTAResult checkAndApplyOTA(const char* authToken, const char* apiServer)
   TL_LOGF("[OTA] Checking: %s\n", checkUrl.c_str());
 
   HTTPClient http;
-  // Use explicit WiFiClient — the single-arg http.begin(url) form is deprecated
+  // Explicit client — the single-arg http.begin(url) form is deprecated
   // on ESP32 Arduino and returns HTTP -1 when a WiFiClientSecure (MQTT) is active.
-  if (!http.begin(_otaHttpClient, checkUrl)) {
+  if (!_otaBegin(http, checkUrl)) {
     TL_LOG("[OTA] http.begin failed");
     return OTA_ERROR;
   }
