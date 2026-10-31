@@ -4,6 +4,7 @@
  */
 
 #include "TL_OTA.h"
+#include "TL_MQTT.h"
 #include "TL_Config.h"
 
 #ifdef ESP32
@@ -11,6 +12,7 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
+#include <WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>   // esp_ota_get_next_update_partition()
@@ -25,6 +27,7 @@
 // server's port gets a 404 from its proxy, so the check would always fail.
 static WiFiClient       _otaHttpClient;
 static WiFiClientSecure _otaHttpsClient;
+static HTTPUpdate       _otaUpdater(30000);   // firmware download, 30 s data timeout
 
 static bool _otaBegin(HTTPClient& http, const String& url)
 {
@@ -165,24 +168,53 @@ OTAResult checkAndApplyOTA(const char* authToken, const char* apiServer)
   // ── Step 2: Report in_progress ───────────────────────────────────────────────
   _otaReportStatus(authToken, apiServer, otaDeviceId, "in_progress", 0);
 
+  // Close MQTT first: while the download blocks the loop, nothing reads the MQTT
+  // socket, and its incoming data can use up the network buffers the download
+  // needs (seen as the download stalling part-way). run() reconnects if the
+  // update fails; on success the device restarts anyway.
+  if (isMQTTConnected()) disconnectMQTT();
+
+  // WiFi modem sleep (on by default) can pause the radio long enough to stall a
+  // long TLS download; keep the radio awake until the update ends.
+  bool wifiSlept = WiFi.getSleep();
+  WiFi.setSleep(false);
+
   // ── Step 3: Download + flash the firmware ────────────────────────────────────
   // httpUpdate handles download, CRC check, and flash write internally.
   // The device reboots into the new firmware on HTTP_UPDATE_OK.
 
 #ifdef LED_BUILTIN
-  httpUpdate.setLedPin(LED_BUILTIN, LOW);  // Blink LED during flash
+  _otaUpdater.setLedPin(LED_BUILTIN, LOW);  // Blink LED during flash
 #endif
+
+  // Restart ourselves after reporting "completed" (step 4); by default the
+  // updater restarts the moment flashing ends and the report is never sent.
+  _otaUpdater.rebootOnUpdate(false);
+
+  // Progress on Serial every 10 %, so a stalled download shows where it stopped
+  _otaUpdater.onProgress([](int done, int total) {
+    static int nextPct = 0;
+    int pct = total > 0 ? (int)((int64_t)done * 100 / total) : 0;
+    if (done == 0) nextPct = 0;
+    if (pct >= nextPct) {
+      TL_LOGF("[OTA] Downloaded %d%% (%d / %d bytes)\n", pct, done, total);
+      nextPct = pct + 10;
+    }
+  });
 
   t_httpUpdate_return result;
   bool useTLS = firmwareUrl.startsWith("https");
 
+  // The updater gives up when no data arrives within its HTTP timeout (8 s by
+  // default). A TLS download beside the MQTT TLS connection can pause longer,
+  // so _otaUpdater allows 30 s.
   if (useTLS) {
     WiFiClientSecure client;
     client.setInsecure();   // Skip cert verification — acceptable for IoT OTA
-    result = httpUpdate.update(client, firmwareUrl);
+    result = _otaUpdater.update(client, firmwareUrl);
   } else {
     WiFiClient client;
-    result = httpUpdate.update(client, firmwareUrl);
+    result = _otaUpdater.update(client, firmwareUrl);
   }
 
   // ── Step 4: Report result ────────────────────────────────────────────────────
@@ -196,8 +228,9 @@ OTAResult checkAndApplyOTA(const char* authToken, const char* apiServer)
   }
 
   // Flash failed
-  String errDetail = "Code " + String(httpUpdate.getLastError())
-                     + ": " + httpUpdate.getLastErrorString();
+  WiFi.setSleep(wifiSlept);
+  String errDetail = "Code " + String(_otaUpdater.getLastError())
+                     + ": " + _otaUpdater.getLastErrorString();
   TL_LOGF("[OTA] Failed — %s\n", errDetail.c_str());
   _otaReportStatus(authToken, apiServer, otaDeviceId, "failed", -1, errDetail.c_str());
   return OTA_FAILED;
