@@ -58,9 +58,9 @@ const char* BLUEPRINT_ID = "YOUR_BLUEPRINT_ID";
 #define BOOT_PIN  0   // BOOT / GPIO0 button — standard on most DevKit boards
 
 // ── Custom BLE brand name ─────────────────────────────────────
-// Device will appear in the app as "AcmeSensors_<ChipID>"
+// Device will appear in the app as "MyProduct_<ChipID>"
 // Change this to your company or product name.
-#define BLE_BRAND_NAME  "AcmeSensors"
+#define BLE_BRAND_NAME  "MyProduct"
 
 // ── Storage keys (max 15 chars each) ─────────────────────────
 #define KEY_BOOT_COUNT  "boot_count"   // int   — increments every power-on
@@ -297,7 +297,7 @@ void setup() {
   }
 
   // ── BLE brand name (must be called BEFORE begin()) ──────────
-  // The device will appear as "AcmeSensors_<ChipID>" in BLE scans.
+  // The device will appear as "MyProduct_<ChipID>" in BLE scans.
   // Remove or change to "ThingsLinker" (the default) if not needed.
   iot.setBLEName(BLE_BRAND_NAME);
 

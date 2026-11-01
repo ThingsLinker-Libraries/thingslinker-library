@@ -531,8 +531,8 @@ public:
    * Default: "ThingsLinker"
    *
    * Example:
-   *   iot.setBLEName("AcmeSensors");
-   *   // Device appears as: AcmeSensors_BC6575C55494
+   *   iot.setBLEName("MyProduct");
+   *   // Device appears as: MyProduct_BC6575C55494
    *   iot.begin();
    */
   void setBLEName(const char* brandName);
