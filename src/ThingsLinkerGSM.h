@@ -1,22 +1,26 @@
 /**
  * @file ThingsLinkerGSM.h
- * @brief ThingsLinker IoT Library — Simcom A7672 / SIM7672 4G GSM variant
+ * @brief ThingsLinker IoT Library — 4G GSM variant (SIMCom A7672, Quectel EC200A)
  *
  * Drop-in alternative to ThingsLinker for devices that use a 4G GSM modem
  * instead of WiFi. Identical widget API — change only setup() credentials.
  *
- * Uses native A76XX MQTT AT commands (AT+CMQTT*) directly — no TinyGSM,
+ * Supported modems, found automatically at start-up (see setModem()):
+ *   SIMCom  A7672 / SIM7672 (A76XX series)  — AT+CMQTT* commands
+ *   Quectel EC200A (EC200x series)          — AT+QMT* commands
+ *
+ * Uses the modem's own MQTT AT commands directly — no TinyGSM,
  * no PubSubClient dependency.
  *
  * ── Required Arduino libraries (install via Library Manager) ─────────────────
  *   ArduinoJson   — https://arduinojson.org
  *
- * ── Wiring (ESP32 + Simcom A7672 / SIM7672 module) ───────────────────────────
- *   ESP32 GPIO16 (RX2) ────── A7672 TX
- *   ESP32 GPIO17 (TX2) ────── A7672 RX
- *   ESP32 GPIO4        ────── A7672 PWRKEY  (active HIGH, ≥1 s pulse to power on)
- *   3.7–4.2 V / 500 mA ───── A7672 VCC     (use a dedicated LDO or LiPo cell)
- *   Common GND         ────── A7672 GND
+ * ── Wiring (ESP32 + A7672 or EC200A module) ──────────────────────────────────
+ *   ESP32 GPIO16 (RX2) ────── modem TX
+ *   ESP32 GPIO17 (TX2) ────── modem RX
+ *   ESP32 GPIO4        ────── modem PWRKEY  (active HIGH, ≥1 s pulse to power on)
+ *   3.7–4.2 V / 500 mA ───── modem VCC     (use a dedicated LDO or LiPo cell)
+ *   Common GND         ────── modem GND
  *
  * ── Quick start ──────────────────────────────────────────────────────────────
  *
@@ -59,6 +63,15 @@ enum _GsmRxState {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Which modem the library talks to (see setModem())
+// ─────────────────────────────────────────────────────────────────────────────
+enum TLModemType {
+  TL_MODEM_AUTO,      ///< ask the modem who made it at start-up (default)
+  TL_MODEM_SIMCOM,    ///< SIMCom A7672 / SIM7672 (A76XX series)
+  TL_MODEM_QUECTEL    ///< Quectel EC200A (EC200x series)
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 class ThingsLinkerGSM {
 public:
 
@@ -79,8 +92,8 @@ public:
 
   /**
    * Initialise the GSM modem, register on the cellular network, open a GPRS
-   * data context, and connect to the ThingsLinker MQTT broker via native
-   * A76XX AT+CMQTT* commands (TLS, no certificate verification).
+   * data context, and connect to the ThingsLinker MQTT broker with the
+   * modem's own MQTT commands (TLS, no certificate verification).
    * Call once in setup().
    *
    * The ThingsLinker broker does not need an MQTT login, so most sketches use:
@@ -273,10 +286,11 @@ public:
   bool   removeKey (const char* key);
   void   clearAllData();
 
-  // ── GPS (A7672 built-in GNSS engine) ────────────────────────────────────────
+  // ── GPS (the modem's built-in GNSS engine) ──────────────────────────────────
 
   /**
-   * Start the A7672 integrated GPS/GLONASS engine.
+   * Start the modem's integrated GPS/GLONASS engine. Only modem versions with
+   * GNSS have one (for example A7672 with GNSS, or an EC200A GNSS variant).
    * Call once in setup() after begin(). The library polls the GNSS engine
    * automatically inside run() — no extra code needed in loop().
    */
@@ -337,6 +351,22 @@ public:
    */
   void setPowerKeyActiveLow(bool activeLow);
 
+  /**
+   * Choose the modem instead of finding it automatically. Call before begin().
+   *
+   *   TL_MODEM_AUTO     (default) ask the modem at start-up who made it
+   *   TL_MODEM_SIMCOM   SIMCom A7672 / SIM7672
+   *   TL_MODEM_QUECTEL  Quectel EC200A
+   *
+   * Only needed for a modem that does not say who made it. Example:
+   *   iot.setModem(TL_MODEM_QUECTEL);
+   *   iot.begin(APN, 4);
+   */
+  void setModem(TLModemType type);
+
+  /** The modem in use: TL_MODEM_SIMCOM or TL_MODEM_QUECTEL once begin() has found it. */
+  TLModemType modem();
+
   // ── Debug ───────────────────────────────────────────────────────────────────
 
   void debug(bool enable);
@@ -369,6 +399,8 @@ public:
 
 private:
   HardwareSerial& _serial;
+  TLModemType     _modem;
+  uint16_t        _msgId;           // MQTT packet id for the next Quectel publish/subscribe
 
   const char*   _authToken;
   const char*   _blueprintId;
@@ -411,6 +443,11 @@ private:
   float         _gpsAltM;
   unsigned long _lastGpsUpdate;
 
+  // One line from the modem. Large enough for a whole incoming message on one
+  // line (Quectel +QMTRECV: carries the topic and payload).
+  static const int TL_GSM_LINE_MAX = 832;
+  char        _lineBuf[TL_GSM_LINE_MAX];
+
   // ── Incoming message assembly buffers (URC parser) ───────────────────────────
   _GsmRxState _rxState;
   char        _rxTopic[256];
@@ -451,20 +488,47 @@ private:
   bool    _clockFromModem();
   void    _checkConnections();
 
-  // ── MQTT AT helpers ──────────────────────────────────────────────────────────
+  // ── MQTT AT helpers (pick the modem's commands) ──────────────────────────────
   bool    _mqttPublishAT(const char* topic, const char* payload, bool retain = false);
   bool    _mqttSubscribeAT(const char* topic);
-  bool    _mqttSessionOpen();
 
   // ── GPS internals ────────────────────────────────────────────────────────────
   void    _updateGPS();
-  bool    _parseGpsInfo(const char* line);
 
   // ── URC / message handling ───────────────────────────────────────────────────
   void    _processLine(const char* line);
   bool    _isMessageLine(const char* line);
+  void    _queueMessage(const char* topic, const char* payload);
   void    _deliverQueued();
   void    _dispatchMessage(const char* topic, const char* payload);
+
+  // ── Modem-specific parts ─────────────────────────────────────────────────────
+  // Everything above works the same on every modem. These use one maker's own
+  // commands: ThingsLinkerGSM_SIMCom.cpp and ThingsLinkerGSM_Quectel.cpp.
+  void    _detectModem();
+
+  bool    _simcomActivateData();
+  bool    _simcomOpenMQTT(const String& statusTopic);
+  bool    _simcomSessionOpen();
+  bool    _simcomPublish(const char* topic, const char* payload, bool retain);
+  bool    _simcomSubscribe(const char* topic);
+  void    _simcomProcessLine(const char* line);
+  int     _simcomSyncTime();
+  void    _simcomStartGPS();
+  bool    _simcomParseGps(const char* line);
+
+  bool    _quectelActivateData();
+  bool    _quectelOpenMQTT(const String& statusTopic);
+  bool    _quectelSessionOpen();
+  bool    _quectelPublish(const char* topic, const char* payload, bool retain);
+  bool    _quectelSubscribe(const char* topic);
+  void    _quectelProcessLine(const char* line);
+  int     _quectelSyncTime();
+  void    _quectelStartGPS();
+  bool    _quectelParseGps(const char* line);
+  bool    _quectelResult(const char* cmd, const char* prefix, uint32_t timeoutMs,
+                         int* values, int count);
+  uint16_t _nextMsgId();
 
   // ── Misc helpers ─────────────────────────────────────────────────────────────
   String        _buildTopic(const char* widgetType, const char* pin);

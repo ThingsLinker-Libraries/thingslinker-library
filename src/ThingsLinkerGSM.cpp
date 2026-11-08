@@ -1,14 +1,16 @@
 /**
  * @file ThingsLinkerGSM.cpp
- * @brief ThingsLinker GSM variant — Simcom A7672 / SIM7672 native AT implementation
+ * @brief ThingsLinker GSM variant — the parts every supported modem shares
  *
- * Uses A76XX native MQTT AT commands (AT+CMQTT*) directly over HardwareSerial.
+ * Talks to the modem's own MQTT AT commands directly over HardwareSerial.
  * No TinyGSM, no PubSubClient — zero external MQTT dependencies.
  *
  * Connection flow:
- *   Power modem → AT ready → configure SSL → network registration →
- *   GPRS data context → AT+CMQTTSTART → AT+CMQTTACCQ → AT+CMQTTSSLCFG →
- *   AT+CMQTTCONNECT → AT+CMQTTSUB (per widget) → loop: AT+CMQTTPUB
+ *   Power modem → AT ready → find the modem (AT+CGMI) → network registration →
+ *   data context → MQTT (TLS) → subscribe per widget → loop: publish
+ *
+ * The steps that use one maker's own commands are in
+ * ThingsLinkerGSM_SIMCom.cpp (A7672) and ThingsLinkerGSM_Quectel.cpp (EC200A).
  */
 
 #include "ThingsLinkerGSM.h"
@@ -23,6 +25,8 @@ ThingsLinkerGSM::ThingsLinkerGSM(HardwareSerial& serial,
                                   const char*     authToken,
                                   const char*     blueprintId)
   : _serial(serial),
+    _modem(TL_MODEM_AUTO),
+    _msgId(0),
     _authToken(authToken),
     _blueprintId(blueprintId),
     _mqttUsername(nullptr),
@@ -55,6 +59,7 @@ ThingsLinkerGSM::ThingsLinkerGSM(HardwareSerial& serial,
     _gpsAltM(0),
     _lastGpsUpdate(0)
 {
+  _lineBuf[0]   = '\0';
   _rxTopic[0]   = '\0';
   _rxPayload[0] = '\0';
   _rxQueueHead  = 0;
@@ -89,8 +94,8 @@ void ThingsLinkerGSM::begin(const char* mqttUsername,
   if (!Serial) { Serial.begin(115200); delay(100); }
 
   TL_LOG("\n========================================");
-  TL_LOG("   ThingsLinker GSM Library v2.0");
-  TL_LOG("   Simcom A7672 / SIM7672 (native AT)");
+  TL_LOG("   ThingsLinker GSM Library v2.2");
+  TL_LOG("   4G modem: SIMCom A7672 / Quectel EC200A");
   TL_LOG("========================================");
   TL_LOG("Chip ID : " + getChipID());
   TL_LOG("Broker  : " MQTT_SERVER ":" + String(MQTT_PORT));
@@ -110,6 +115,7 @@ void ThingsLinkerGSM::begin(const char* mqttUsername,
   // Step 3: basic modem init
   _atCmd("ATE0");                     // echo off
   _atCmd("AT+CMEE=2");                // verbose error codes
+  _detectModem();                     // which maker's commands to use
 
   char line[64];
   _sendAT("AT+CGMM");                 // model info
@@ -136,19 +142,18 @@ void ThingsLinkerGSM::run() {
 
   // Drain all available lines from the modem serial buffer
   while (_serial.available()) {
-    char line[512];
     int pos = 0;
     uint32_t deadline = millis() + 50;
     while (millis() < deadline) {
       if (_serial.available()) {
         char c = (char)_serial.read();
         if (c == '\n') break;
-        if (c != '\r' && pos < (int)sizeof(line) - 1) line[pos++] = c;
+        if (c != '\r' && pos < TL_GSM_LINE_MAX - 1) _lineBuf[pos++] = c;
         deadline = millis() + 20;  // reset timeout on each char
       }
     }
-    line[pos] = '\0';
-    if (pos > 0) _processLine(line);
+    _lineBuf[pos] = '\0';
+    if (pos > 0) _processLine(_lineBuf);
   }
 
   // Hand on messages that came in while a command was running
@@ -199,28 +204,30 @@ void ThingsLinkerGSM::_sendAT(const char* cmd) {
 }
 
 bool ThingsLinkerGSM::_readLine(char* buf, int len, uint32_t timeoutMs) {
+  // The line is read whole into _lineBuf first: an incoming message can be
+  // longer than the caller's buffer (Quectel sends one on a single line).
   uint32_t deadline = millis() + timeoutMs;
   int pos = 0;
   while (millis() < deadline) {
     if (_serial.available()) {
       char c = (char)_serial.read();
       if (c == '\n') {
-        buf[pos] = '\0';
-        // strip trailing \r
-        if (pos > 0 && buf[pos-1] == '\r') buf[--pos] = '\0';
+        _lineBuf[pos] = '\0';
         // An incoming message can arrive in the middle of any command's
         // reply. Take it in here and keep waiting for the reply itself.
-        if (_isMessageLine(buf)) {
-          _processLine(buf);
+        if (_isMessageLine(_lineBuf)) {
+          _processLine(_lineBuf);
           pos = 0;
           continue;
         }
+        strlcpy(buf, _lineBuf, len);
         return true;
       }
-      if (c != '\r' && pos < len - 1) buf[pos++] = c;
+      if (c != '\r' && pos < TL_GSM_LINE_MAX - 1) _lineBuf[pos++] = c;
     }
   }
-  buf[pos] = '\0';
+  _lineBuf[pos] = '\0';
+  strlcpy(buf, _lineBuf, len);
   return false;
 }
 
@@ -266,18 +273,17 @@ bool ThingsLinkerGSM::_atDataCmd(const char* cmd, const char* data, int dataLen,
   // Wait for ">" prompt. Whole lines seen before it may be incoming messages.
   uint32_t deadline = millis() + timeoutMs;
   bool gotPrompt = false;
-  char seen[96];
   int  seenLen = 0;
   while (millis() < deadline) {
     if (_serial.available()) {
       char c = (char)_serial.read();
       if (c == '>' && seenLen == 0) { gotPrompt = true; break; }
       if (c == '\n') {
-        seen[seenLen] = '\0';
-        if (_isMessageLine(seen)) _processLine(seen);
+        _lineBuf[seenLen] = '\0';
+        if (_isMessageLine(_lineBuf)) _processLine(_lineBuf);
         seenLen = 0;
-      } else if (c != '\r' && seenLen < (int)sizeof(seen) - 1) {
-        seen[seenLen++] = c;
+      } else if (c != '\r' && seenLen < TL_GSM_LINE_MAX - 1) {
+        _lineBuf[seenLen++] = c;
       }
     }
   }
@@ -348,25 +354,29 @@ bool ThingsLinkerGSM::_waitModem(uint32_t timeoutMs) {
 bool ThingsLinkerGSM::_connectNetwork() {
   TL_LOG("[GSM] Waiting for network registration (up to 60 s)...");
 
-  // Wait for CGREG=1 (home) or 5 (roaming)
+  // Wait for registration: 1 (home) or 5 (roaming). +CGREG is the packet
+  // network; an LTE-only modem may report it only in +CEREG, so both are asked.
   uint32_t deadline = millis() + 60000UL;
   bool registered = false;
-  while (millis() < deadline) {
-    _sendAT("AT+CGREG?");
-    char line[64];
-    // Read lines until OK, looking for +CGREG: n,m
-    while (_readLine(line, sizeof(line), 2000)) {
-      if (strncmp(line, "+CGREG:", 7) == 0) {
-        // Format: +CGREG: <n>,<stat>
-        int n = 0, stat = 0;
-        sscanf(line + 7, " %d,%d", &n, &stat);
-        if (stat == 1 || stat == 5) { registered = true; }
-        break;
+  const char* queries[][2] = { { "AT+CGREG?", "+CGREG:" }, { "AT+CEREG?", "+CEREG:" } };
+  while (millis() < deadline && !registered) {
+    for (auto& q : queries) {
+      _sendAT(q[0]);
+      char line[64];
+      size_t plen = strlen(q[1]);
+      // Read lines until OK, looking for <prefix> n,stat
+      while (_readLine(line, sizeof(line), 2000)) {
+        if (strncmp(line, q[1], plen) == 0) {
+          int n = 0, stat = 0;
+          sscanf(line + plen, " %d,%d", &n, &stat);
+          if (stat == 1 || stat == 5) { registered = true; }
+          break;
+        }
+        if (strncmp(line, "OK", 2) == 0 || strncmp(line, "ERROR", 5) == 0) break;
       }
-      if (strncmp(line, "OK", 2) == 0 || strncmp(line, "ERROR", 5) == 0) break;
+      if (registered) break;
     }
-    if (registered) break;
-    delay(2000);
+    if (!registered) delay(2000);
   }
 
   if (!registered) {
@@ -386,45 +396,9 @@ bool ThingsLinkerGSM::_connectNetwork() {
   }
   TL_LOGF("[GSM] Registered — signal quality: %d/31\n", _sigQuality);
 
-  // Configure PDP context (cid=1)
-  {
-    char cmd[80];
-    snprintf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", _apn);
-    _atCmd(cmd);
-  }
-
-  // Activate PDP context
-  TL_LOGF("[GSM] Activating GPRS (APN: %s)...\n", _apn);
-  if (!_atCmd("AT+CGACT=1,1", 15000)) {
-    // May already be active — check
-    _sendAT("AT+CGACT?");
-    bool active = false;
-    while (_readLine(line, sizeof(line), 3000)) {
-      if (strstr(line, "+CGACT: 1,1")) { active = true; }
-      if (strncmp(line, "OK", 2) == 0) break;
-    }
-    if (!active) {
-      TL_LOG("[GSM] GPRS activation failed — check APN, SIM data plan");
-      return false;
-    }
-  }
-
-  // Read assigned IP
-  _sendAT("AT+CGPADDR=1");
-  while (_readLine(line, sizeof(line), 3000)) {
-    if (strncmp(line, "+CGPADDR:", 9) == 0) {
-      // Format: +CGPADDR: 1,<ip>
-      char* comma = strchr(line + 9, ',');
-      if (comma) {
-        _ipAddress = String(comma + 1);
-        _ipAddress.trim();
-        // Strip surrounding quotes if present
-        _ipAddress.replace("\"", "");
-      }
-      break;
-    }
-    if (strncmp(line, "OK", 2) == 0) break;
-  }
+  // Data connection, with the modem's own commands
+  bool dataOk = (_modem == TL_MODEM_QUECTEL) ? _quectelActivateData() : _simcomActivateData();
+  if (!dataOk) return false;
 
   TL_LOG("[GSM] GPRS connected — IP: " + _ipAddress);
   _networkOk = true;
@@ -432,16 +406,8 @@ bool ThingsLinkerGSM::_connectNetwork() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MQTT connection using native A76XX AT+CMQTT* commands
-//
-// Sequence:
-//   AT+CMQTTSTART                             — start MQTT service (PDP ctx)
-//   AT+CMQTTACCQ=0,"<clientId>",1             — acquire client, type=1 (SSL)
-//   AT+CMQTTSSLCFG=0,0                        — link session 0 → SSL ctx 0
-//   AT+CMQTTWILLTOPIC=0,<len>  +data          — set LWT topic
-//   AT+CMQTTWILLMSG=0,<len>,1  +data          — set LWT message (QoS 1)
-//   AT+CMQTTCONNECT=0,"tcp://host:port",60,1,"user","pass" — connect
-//   → URC: +CMQTTCONNECT: 0,0  means success
+// MQTT connection. The modem's own commands open it (_simcomOpenMQTT() /
+// _quectelOpenMQTT()); then ONLINE is published and every widget subscribed.
 // ─────────────────────────────────────────────────────────────────────────────
 bool ThingsLinkerGSM::_connectMQTT() {
   TL_LOG("[MQTT] Starting MQTT service...");
@@ -449,143 +415,11 @@ bool ThingsLinkerGSM::_connectMQTT() {
   String statusTopic = "device/status/" + String(_blueprintId)
                        + "/" + String(_authToken) + "/";
 
-  // The modem keeps its own connection to the broker, so a session from before
-  // the ESP32 restarted may still be open. Closing it below is a clean
-  // disconnect, which does not send the last will: say OFFLINE first, or the
-  // retained ONLINE would stay if the new connection then fails.
-  if (_mqttSessionOpen()) {
-    bool wasOk = _mqttOk;
-    _mqttOk = true;   // _mqttPublishAT() only publishes on a live session
-    if (_mqttPublishAT(statusTopic.c_str(), "OFFLINE", true)) {
-      TL_LOG("[MQTT] Status → OFFLINE (closing the previous session)");
-    }
-    _mqttOk = wasOk;
-  }
-
-  // Stop any previous session cleanly (ignore errors)
-  _atCmd("AT+CMQTTDISC=0,10", 12000);
-  delay(500);
-  _atCmd("AT+CMQTTREL=0", 2000);
-  delay(200);
-  _atCmd("AT+CMQTTSTOP", 3000);
-  delay(500);
-
-  // TLS settings for SSL context 0. Set before every connection: straight
-  // after power-on the modem answers AT but still refuses these, so setting
-  // them once at start-up could leave them unset.
-  // AT+CSSLCFG="sslversion",<ctx>,4      → any TLS version
-  // AT+CSSLCFG="authmode",<ctx>,0        → no certificate verification
-  // AT+CSSLCFG="ignorelocaltime",<ctx>,1 → ignore RTC time mismatch
-  // AT+CSSLCFG="enableSNI",<ctx>,1       → send the server's name in the handshake;
-  //   brokers that host several names on one address need it to pick the certificate
-  const char* tlsSettings[] = {
-    "AT+CSSLCFG=\"sslversion\",0,4",
-    "AT+CSSLCFG=\"authmode\",0,0",
-    "AT+CSSLCFG=\"ignorelocaltime\",0,1",
-    "AT+CSSLCFG=\"enableSNI\",0,1",
-  };
-  for (const char* setting : tlsSettings) {
-    // A modem that has just started may refuse the first tries
-    for (int attempt = 0; attempt < 5 && !_atCmd(setting, 2000); attempt++) delay(1000);
-  }
-
-  // Start MQTT service
-  if (!_atCmd("AT+CMQTTSTART", 5000)) {
-    // Already started? Try to continue
-    TL_LOG("[MQTT] CMQTTSTART failed (may already be running)");
-  }
-  delay(200);
-
-  // Build client ID and topics
-  String clientId    = "TLG_" + getChipID();
-
-  // Acquire client (index=0, type=1 for SSL)
-  {
-    // Built as a String: the client ID holds the blueprint key and auth token,
-    // too long for a small fixed buffer
-    String cmd = "AT+CMQTTACCQ=0,\"" + clientId + "\",1";
-    if (!_atCmd(cmd.c_str(), 3000)) {
-      TL_LOG("[MQTT] CMQTTACCQ failed");
-      return false;
-    }
-  }
-  delay(100);
-
-  // Link session 0 to SSL context 0
-  _atCmd("AT+CMQTTSSLCFG=0,0", 2000);
-
-  // Set LWT topic
-  {
-    int len = statusTopic.length();
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "AT+CMQTTWILLTOPIC=0,%d", len);
-    _atDataCmd(cmd, statusTopic.c_str(), len, 3000);
-  }
-
-  // Set LWT message "OFFLINE", QoS 1, retain=1
-  {
-    const char* lwtMsg = "OFFLINE";
-    int len = strlen(lwtMsg);
-    char cmd[40];
-    snprintf(cmd, sizeof(cmd), "AT+CMQTTWILLMSG=0,%d,1", len);
-    _atDataCmd(cmd, lwtMsg, len, 3000);
-  }
-
-  // Connect to broker
-  // Format: AT+CMQTTCONNECT=<idx>,"<url>",<keepalive>,<cleanSession>[,"<user>","<pass>"]
-  // The address always starts with tcp://. Whether the link is encrypted was
-  // chosen above (AT+CMQTTACCQ ...,1); the modem rejects an ssl:// address.
-  TL_LOG("[MQTT] Connecting to " MQTT_SERVER ":" + String(MQTT_PORT) + " (TLS)");
-  {
-    char cmd[256];
-    bool hasAuth = (_mqttUsername && _mqttUsername[0]) && (_mqttPassword && _mqttPassword[0]);
-    if (hasAuth) {
-      snprintf(cmd, sizeof(cmd),
-               "AT+CMQTTCONNECT=0,\"tcp://" MQTT_SERVER ":%d\",%d,1,\"%s\",\"%s\"",
-               MQTT_PORT, MQTT_KEEPALIVE, _mqttUsername, _mqttPassword);
-    } else {
-      snprintf(cmd, sizeof(cmd),
-               "AT+CMQTTCONNECT=0,\"tcp://" MQTT_SERVER ":%d\",%d,1",
-               MQTT_PORT, MQTT_KEEPALIVE);
-    }
-    _sendAT(cmd);
-  }
-
-  // Wait for +CMQTTCONNECT: 0,<err> URC (up to 20 s)
-  {
-    char line[128];
-    uint32_t deadline = millis() + 20000UL;
-    bool connected = false;
-    while (millis() < deadline) {
-      if (_readLine(line, sizeof(line), deadline - millis())) {
-        if (strncmp(line, "+CMQTTCONNECT:", 14) == 0) {
-          // +CMQTTCONNECT: <idx>,<err>
-          int idx = 0, err = -1;
-          sscanf(line + 14, " %d,%d", &idx, &err);
-          if (err == 0) {
-            connected = true;
-          } else {
-            TL_LOGF("[MQTT] Connect error %d "
-                    "(0=ok,3=sock fail,30=bad auth,32=handshake fail,33=no cert)\n", err);
-            if (err == 32) {
-              TL_LOG("[MQTT] The secure handshake failed. Some modem firmware cannot use a "
-                     "server certificate of the ECDSA kind; the server then needs an RSA certificate.");
-            }
-          }
-          break;
-        }
-        // The modem refused the command itself
-        if (strncmp(line, "ERROR", 5) == 0) {
-          TL_LOG("[MQTT] The modem rejected the connect command");
-          break;
-        }
-      }
-    }
-
-    if (!connected) {
-      TL_LOG("[MQTT] Connection failed");
-      return false;
-    }
+  bool connected = (_modem == TL_MODEM_QUECTEL) ? _quectelOpenMQTT(statusTopic)
+                                                : _simcomOpenMQTT(statusTopic);
+  if (!connected) {
+    TL_LOG("[MQTT] Connection failed");
+    return false;
   }
 
   TL_LOG("[MQTT] Connected!");
@@ -599,8 +433,6 @@ bool ThingsLinkerGSM::_connectMQTT() {
 
   // Publish ONLINE status (retain, QoS 1)
   {
-    String statusTopic = "device/status/" + String(_blueprintId)
-                         + "/" + String(_authToken) + "/";
     // Retained, so an app that opens later still sees it. Without the flag
     // the retained "OFFLINE" from the last will would stay on the broker.
     _mqttPublishAT(statusTopic.c_str(), "ONLINE", true);
@@ -654,190 +486,51 @@ void ThingsLinkerGSM::_subscribeAll() {
   }
 }
 
-// Whether MQTT session 0 in the modem is connected to the broker.
-//   AT+CMQTTDISC?  → +CMQTTDISC: 0,0   (0 = connected, 1 = not connected)
-bool ThingsLinkerGSM::_mqttSessionOpen() {
-  _sendAT("AT+CMQTTDISC?");
-  char line[48];
-  bool open = false;
-  uint32_t deadline = millis() + 2000UL;
-  while (millis() < deadline && _readLine(line, sizeof(line), deadline - millis())) {
-    int idx = -1, state = -1;
-    if (sscanf(line, "+CMQTTDISC: %d,%d", &idx, &state) == 2 && idx == 0) open = (state == 0);
-    if (strncmp(line, "OK", 2) == 0 || strncmp(line, "ERROR", 5) == 0) break;
-  }
-  return open;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// MQTT publish via AT commands
-//   AT+CMQTTTOPIC=0,<len>   → > → <topic>  → OK
-//   AT+CMQTTPAYLOAD=0,<len> → > → <payload> → OK
-//   AT+CMQTTPUB=0,1,60[,1]  → OK → +CMQTTPUB: 0,0     (,1 = retained)
+// MQTT publish and subscribe, with the modem's own commands
 // ─────────────────────────────────────────────────────────────────────────────
 bool ThingsLinkerGSM::_mqttPublishAT(const char* topic, const char* payload, bool retain) {
   if (!_mqttOk) return false;
-
-  int topicLen   = strlen(topic);
-  int payloadLen = strlen(payload);
-
-  // Set topic
-  {
-    char cmd[32];
-    snprintf(cmd, sizeof(cmd), "AT+CMQTTTOPIC=0,%d", topicLen);
-    if (!_atDataCmd(cmd, topic, topicLen, 3000)) {
-      TL_LOG("[MQTT] CMQTTTOPIC failed");
-      return false;
-    }
-  }
-
-  // Set payload
-  {
-    char cmd[32];
-    snprintf(cmd, sizeof(cmd), "AT+CMQTTPAYLOAD=0,%d", payloadLen);
-    if (!_atDataCmd(cmd, payload, payloadLen, 3000)) {
-      TL_LOG("[MQTT] CMQTTPAYLOAD failed");
-      return false;
-    }
-  }
-
-  // Publish (QoS 1, timeout 60 s). The retain flag is off unless asked for.
-  _sendAT(retain ? "AT+CMQTTPUB=0,1,60,1" : "AT+CMQTTPUB=0,1,60");
-  char line[64];
-  uint32_t deadline = millis() + 10000UL;
-  while (millis() < deadline) {
-    if (_readLine(line, sizeof(line), deadline - millis())) {
-      if (strncmp(line, "+CMQTTPUB:", 10) == 0) {
-        int idx = 0, err = -1;
-        sscanf(line + 10, " %d,%d", &idx, &err);
-        if (err == 0) return true;
-        TL_LOGF("[MQTT] Publish error %d\n", err);
-        return false;
-      }
-      if (strncmp(line, "ERROR", 5) == 0) return false;
-    }
-  }
-  return false;
+  return (_modem == TL_MODEM_QUECTEL) ? _quectelPublish(topic, payload, retain)
+                                      : _simcomPublish(topic, payload, retain);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MQTT subscribe via AT commands
-//   AT+CMQTTSUBTOPIC=0,<len>,1  → > → <topic> → OK
-//   AT+CMQTTSUB=0               → OK → +CMQTTSUB: 0,0
-// ─────────────────────────────────────────────────────────────────────────────
 bool ThingsLinkerGSM::_mqttSubscribeAT(const char* topic) {
   if (!_mqttOk) return false;
-
-  int len = strlen(topic);
-  char cmd[32];
-  snprintf(cmd, sizeof(cmd), "AT+CMQTTSUBTOPIC=0,%d,1", len);
-  if (!_atDataCmd(cmd, topic, len, 3000)) {
-    TL_LOG("[MQTT] CMQTTSUBTOPIC failed: " + String(topic));
-    return false;
-  }
-
-  _sendAT("AT+CMQTTSUB=0");
-  char line[64];
-  uint32_t deadline = millis() + 5000UL;
-  while (millis() < deadline) {
-    if (_readLine(line, sizeof(line), deadline - millis())) {
-      if (strncmp(line, "+CMQTTSUB:", 10) == 0) {
-        int idx = 0, err = -1;
-        sscanf(line + 10, " %d,%d", &idx, &err);
-        bool ok = (err == 0);
-        TL_LOGF("[MQTT] %s sub: %s\n", topic, ok ? "OK" : "FAIL");
-        return ok;
-      }
-      if (strncmp(line, "ERROR", 5) == 0) return false;
-    }
-  }
-  return false;
+  return (_modem == TL_MODEM_QUECTEL) ? _quectelSubscribe(topic) : _simcomSubscribe(topic);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// URC / line processor (called from run() for each line read)
-//
-// Incoming MQTT message sequence:
-//   +CMQTTRXSTART: <idx>,<topic_len>,<payload_len>
-//   +CMQTTRXTOPIC: <idx>,<sub_topic_len>
-//   <topic data — sub_topic_len bytes, may contain \r\n>
-//   +CMQTTRXPAYLOAD: <idx>,<sub_payload_len>
-//   <payload data>
-//   +CMQTTRXEND: <idx>
-//
-// Connection lost:
-//   +CMQTTCONNLOST: <idx>,<cause>
+// Lines that are not replies to a command: incoming messages and a lost
+// connection (called from run() and from inside any command)
 // ─────────────────────────────────────────────────────────────────────────────
 void ThingsLinkerGSM::_processLine(const char* line) {
-  // ── Incoming message start ──────────────────────────────────────────────────
-  if (strncmp(line, "+CMQTTRXSTART:", 14) == 0) {
-    int idx = 0, tLen = 0, pLen = 0;
-    sscanf(line + 14, " %d,%d,%d", &idx, &tLen, &pLen);
-    _rxTopicExpected   = tLen;
-    _rxPayloadExpected = pLen;
-    _rxTopic[0]        = '\0';
-    _rxPayload[0]      = '\0';
-    _rxState           = GSM_RX_IDLE;  // next line will be +CMQTTRXTOPIC
-    return;
-  }
-
-  // ── Topic header ────────────────────────────────────────────────────────────
-  if (strncmp(line, "+CMQTTRXTOPIC:", 14) == 0) {
-    // Read exactly _rxTopicExpected bytes from serial
-    if (_rxTopicExpected > 0 && _rxTopicExpected < (int)sizeof(_rxTopic)) {
-      _readBytes(_rxTopic, _rxTopicExpected, 2000);
-      _rxTopic[_rxTopicExpected] = '\0';
-    }
-    _rxState = GSM_RX_TOPIC;
-    return;
-  }
-
-  // ── Payload header ──────────────────────────────────────────────────────────
-  if (strncmp(line, "+CMQTTRXPAYLOAD:", 16) == 0) {
-    // Read exactly _rxPayloadExpected bytes from serial
-    if (_rxPayloadExpected > 0 && _rxPayloadExpected < (int)sizeof(_rxPayload)) {
-      _readBytes(_rxPayload, _rxPayloadExpected, 3000);
-      _rxPayload[_rxPayloadExpected] = '\0';
-    }
-    _rxState = GSM_RX_PAYLOAD;
-    return;
-  }
-
-  // ── End of message — queue it for run() ─────────────────────────────────────
-  if (strncmp(line, "+CMQTTRXEND:", 12) == 0) {
-    if (_rxTopic[0] && _rxPayload[0]) {
-      TL_LOG("[MQTT] RX topic:   " + String(_rxTopic));
-      TL_LOG("[MQTT] RX payload: " + String(_rxPayload));
-      if (_rxQueueCount == TL_GSM_RX_QUEUE) {
-        TL_LOG("[MQTT] Too many messages waiting — oldest dropped");
-        _rxQueueHead = (_rxQueueHead + 1) % TL_GSM_RX_QUEUE;
-        _rxQueueCount--;
-      }
-      _GsmRxMsg& slot = _rxQueue[(_rxQueueHead + _rxQueueCount) % TL_GSM_RX_QUEUE];
-      strlcpy(slot.topic, _rxTopic, sizeof(slot.topic));
-      strlcpy(slot.payload, _rxPayload, sizeof(slot.payload));
-      _rxQueueCount++;
-    }
-    _rxTopic[0]   = '\0';
-    _rxPayload[0] = '\0';
-    _rxState      = GSM_RX_IDLE;
-    return;
-  }
-
-  // ── Connection lost ──────────────────────────────────────────────────────────
-  if (strncmp(line, "+CMQTTCONNLOST:", 15) == 0) {
-    int idx = 0, cause = 0;
-    sscanf(line + 15, " %d,%d", &idx, &cause);
-    TL_LOGF("[MQTT] Connection lost (cause=%d) — will reconnect\n", cause);
-    _mqttOk = false;
-    return;
-  }
+  if (_modem == TL_MODEM_QUECTEL) _quectelProcessLine(line);
+  else                            _simcomProcessLine(line);
 }
 
 // Lines that belong to an incoming message or a lost connection, as opposed
 // to a reply to the command being run
 bool ThingsLinkerGSM::_isMessageLine(const char* line) {
+  if (_modem == TL_MODEM_QUECTEL) {
+    return strncmp(line, "+QMTRECV:", 9) == 0 || strncmp(line, "+QMTSTAT:", 9) == 0;
+  }
   return strncmp(line, "+CMQTTRX", 8) == 0 || strncmp(line, "+CMQTTCONNLOST:", 15) == 0;
+}
+
+// Keep a received message for run(). When the queue is full the oldest goes.
+void ThingsLinkerGSM::_queueMessage(const char* topic, const char* payload) {
+  TL_LOG("[MQTT] RX topic:   " + String(topic));
+  TL_LOG("[MQTT] RX payload: " + String(payload));
+  if (_rxQueueCount == TL_GSM_RX_QUEUE) {
+    TL_LOG("[MQTT] Too many messages waiting — oldest dropped");
+    _rxQueueHead = (_rxQueueHead + 1) % TL_GSM_RX_QUEUE;
+    _rxQueueCount--;
+  }
+  _GsmRxMsg& slot = _rxQueue[(_rxQueueHead + _rxQueueCount) % TL_GSM_RX_QUEUE];
+  strlcpy(slot.topic, topic, sizeof(slot.topic));
+  strlcpy(slot.payload, payload, sizeof(slot.payload));
+  _rxQueueCount++;
 }
 
 // Hand queued messages to the callbacks, oldest first. A callback may publish,
@@ -899,12 +592,20 @@ void ThingsLinkerGSM::_dispatchMessage(const char* topic, const char* payload) {
   memcpy(pin, topic + pinStart, pinLen);
   pin[pinLen] = '\0';
 
+  // The widget type as well as the pin decides the callback: several widgets
+  // can share a pin (a Terminal and a Text Input on V2, for example)
+  char type[20];
+  int typeLen = slashes[1] - slashes[0] - 1;
+  if (typeLen <= 0 || typeLen >= (int)sizeof(type)) return;
+  memcpy(type, topic + slashes[0] + 1, typeLen);
+  type[typeLen] = '\0';
+
   TL_LOGF("[MQTT] pin=%s  value=%.2f\n", pin, value);
 
   // RGB widget
   if (!doc["r"].isNull() && !doc["g"].isNull() && !doc["b"].isNull()) {
     for (int i = 0; i < _rgbCount; i++) {
-      if (strcmp(pin, _rgbCbs[i].pin) == 0 && _rgbCbs[i].fn) {
+      if (strcmp(type, "RGB") == 0 && strcmp(pin, _rgbCbs[i].pin) == 0 && _rgbCbs[i].fn) {
         uint8_t     r       = doc["r"].as<uint8_t>();
         uint8_t     g       = doc["g"].as<uint8_t>();
         uint8_t     b       = doc["b"].as<uint8_t>();
@@ -919,7 +620,7 @@ void ThingsLinkerGSM::_dispatchMessage(const char* topic, const char* payload) {
   // Joystick widget
   if (!doc["x"].isNull() && !doc["y"].isNull()) {
     for (int i = 0; i < _joyCount; i++) {
-      if (strcmp(pin, _joyCbs[i].pin) == 0 && _joyCbs[i].fn) {
+      if (strcmp(type, "Joystick") == 0 && strcmp(pin, _joyCbs[i].pin) == 0 && _joyCbs[i].fn) {
         _joyCbs[i].fn(doc["x"].as<float>(), doc["y"].as<float>());
         return;
       }
@@ -928,7 +629,7 @@ void ThingsLinkerGSM::_dispatchMessage(const char* topic, const char* payload) {
 
   // Text callbacks (Terminal)
   for (int i = 0; i < _textCount; i++) {
-    if (strcmp(pin, _textCbs[i].pin) == 0 && _textCbs[i].fn) {
+    if (strcmp(pin, _textCbs[i].pin) == 0 && strcmp(type, _textCbs[i].widgetType) == 0 && _textCbs[i].fn) {
       char scratch[32];
       _textCbs[i].fn(tlTextOf(doc, scratch, sizeof(scratch)));
       return;
@@ -937,7 +638,7 @@ void ThingsLinkerGSM::_dispatchMessage(const char* topic, const char* payload) {
 
   // Bool callbacks (Button / LED / Switch)
   for (int i = 0; i < _boolCount; i++) {
-    if (strcmp(pin, _boolCbs[i].pin) == 0 && _boolCbs[i].fn) {
+    if (strcmp(pin, _boolCbs[i].pin) == 0 && strcmp(type, _boolCbs[i].widgetType) == 0 && _boolCbs[i].fn) {
       _boolCbs[i].fn(tlBoolOf(doc));
       return;
     }
@@ -945,7 +646,7 @@ void ThingsLinkerGSM::_dispatchMessage(const char* topic, const char* payload) {
 
   // Float callbacks (Slider, Timer, Value Display)
   for (int i = 0; i < _floatCount; i++) {
-    if (strcmp(pin, _floatCbs[i].pin) == 0 && _floatCbs[i].fn) {
+    if (strcmp(pin, _floatCbs[i].pin) == 0 && strcmp(type, _floatCbs[i].widgetType) == 0 && _floatCbs[i].fn) {
       _floatCbs[i].fn(value);
       return;
     }
@@ -1025,27 +726,15 @@ bool ThingsLinkerGSM::_clockFromModem() {
 // Time sync: an internet time server first, the modem's own clock as fallback
 // ─────────────────────────────────────────────────────────────────────────────
 void ThingsLinkerGSM::_syncTime() {
-  // Ask a time server and have the modem set its clock in UTC (zone 0). The
-  // modem's clock is not trusted as it stands: it may have been set earlier
-  // with another zone but still be labelled "+00" (seen on an A7672: eight
-  // hours ahead), which would put every reading hours in the future.
-  _atCmd("AT+CNTP=\"" NTP_SERVER_1 "\",0", 3000);
-  char line[64];
+  // Ask a time server and have the modem set its clock from it. The modem's
+  // clock is not trusted as it stands: it may have been set earlier with
+  // another zone but still be labelled "+00" (seen on an A7672: eight hours
+  // ahead), which would put every reading hours in the future.
   bool ntpOk = false;
   // The first request right after the data connection comes up can fail, so
   // it is tried twice.
   for (int attempt = 1; attempt <= 2 && !ntpOk; attempt++) {
-    _sendAT("AT+CNTP");
-    int code = -1;
-    uint32_t deadline = millis() + 15000UL;
-    while (millis() < deadline) {
-      if (!_readLine(line, sizeof(line), deadline - millis())) break;
-      if (strncmp(line, "+CNTP:", 6) == 0) {           // +CNTP: 0 = clock updated
-        code = atoi(line + 6);
-        break;
-      }
-      if (strncmp(line, "ERROR", 5) == 0) break;
-    }
+    int code = (_modem == TL_MODEM_QUECTEL) ? _quectelSyncTime() : _simcomSyncTime();
     ntpOk = (code == 0);
     if (!ntpOk) {
       TL_LOGF("[Time] Time server request %d failed (code %d)\n", attempt, code);
@@ -1333,80 +1022,29 @@ bool   ThingsLinkerGSM::removeKey (const char* k)                  { return ::re
 void   ThingsLinkerGSM::clearAllData()                             { ::clearAllData();           }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GPS — A7672 built-in GNSS engine
+// GPS — the modem's built-in GNSS engine
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ThingsLinkerGSM::startGPS() {
-  // Power on the GNSS module and select GPS + GLONASS mode
-  _atCmd("AT+CGNSSPWR=1", 3000);
-  delay(300);
-  _atCmd("AT+CGNSSMODE=1", 2000);   // 1 = GPS + GLONASS
+  if (_modem == TL_MODEM_QUECTEL) _quectelStartGPS();
+  else                            _simcomStartGPS();
   _gpsStarted = true;
   TL_LOG("[GPS] GNSS engine started — waiting for first fix...");
 }
 
-// Parse +CGPSINFO response line.
-// Format: +CGPSINFO: <lat>,<N/S>,<lon>,<E/W>,<date>,<time>,<alt>,<speed>,<course>
-// No-fix:  +CGPSINFO: ,,,,,,,,
-// Returns true if fix is valid.
-bool ThingsLinkerGSM::_parseGpsInfo(const char* line) {
-  const char* p = strstr(line, "+CGPSINFO:");
-  if (!p) return false;
-  p += 10;
-  while (*p == ' ') p++;
-
-  // Empty first field means no fix
-  if (*p == ',') {
-    _gpsValid = false;
-    return false;
-  }
-
-  char latStr[16] = {}, ns[4] = {}, lonStr[16] = {}, ew[4] = {};
-  char dateStr[8] = {}, timeStr[12] = {};
-  float alt = 0, speedKnots = 0, course = 0;
-
-  int n = sscanf(p, "%15[^,],%3[^,],%15[^,],%3[^,],%7[^,],%11[^,],%f,%f,%f",
-                 latStr, ns, lonStr, ew, dateStr, timeStr,
-                 &alt, &speedKnots, &course);
-  if (n < 4) { _gpsValid = false; return false; }
-
-  // DDMM.MMMM → decimal degrees
-  float latRaw = atof(latStr);
-  int   latDeg = (int)(latRaw / 100);
-  _gpsLat = (latDeg + (latRaw - latDeg * 100.0f) / 60.0f) * (ns[0] == 'S' ? -1.0f : 1.0f);
-
-  float lonRaw = atof(lonStr);
-  int   lonDeg = (int)(lonRaw / 100);
-  _gpsLng = (lonDeg + (lonRaw - lonDeg * 100.0f) / 60.0f) * (ew[0] == 'W' ? -1.0f : 1.0f);
-
-  _gpsAltM     = alt;
-  _gpsSpeedKmh = speedKnots * 1.852f;
-  _gpsValid    = true;
-  return true;
-}
-
+// Ask for the position (called from run() every second while GPS is on)
+//   SIMCom:  AT+CGPSINFO   → +CGPSINFO: ...
+//   Quectel: AT+QGPSLOC=2  → +QGPSLOC: ...   (+CME ERROR: 516 = no fix yet)
 void ThingsLinkerGSM::_updateGPS() {
-  // Send AT+CGPSINFO and read response
-  while (_serial.available()) _serial.read();  // flush
-  _serial.print("AT+CGPSINFO\r\n");
+  bool quectel = (_modem == TL_MODEM_QUECTEL);
+  _sendAT(quectel ? "AT+QGPSLOC=2" : "AT+CGPSINFO");
 
   char line[128];
-  uint32_t deadline = millis() + 500;   // A7672 responds within ~100 ms
-  int pos = 0;
-
-  while (millis() < deadline) {
-    if (_serial.available()) {
-      char c = (char)_serial.read();
-      if (c == '\n') {
-        line[pos] = '\0';
-        if (pos > 0 && strstr(line, "+CGPSINFO:")) {
-          _parseGpsInfo(line);
-        }
-        pos = 0;
-      } else if (c != '\r' && pos < (int)sizeof(line) - 1) {
-        line[pos++] = c;
-      }
-    }
+  uint32_t deadline = millis() + 500;   // the modem answers within ~100 ms
+  while (millis() < deadline && _readLine(line, sizeof(line), deadline - millis())) {
+    if (strncmp(line, "OK", 2) == 0 || strncmp(line, "ERROR", 5) == 0) break;
+    if (strstr(line, "+CME ERROR")) { _gpsValid = false; break; }
+    if (quectel ? _quectelParseGps(line) : _simcomParseGps(line)) break;
   }
 }
 
@@ -1434,6 +1072,37 @@ uint16_t ThingsLinkerGSM::offlineCount() { return tlOfflineCount(); }
 
 void ThingsLinkerGSM::setPowerKeyActiveLow(bool activeLow) {
   _pwrKeyActiveLow = activeLow;
+}
+
+void ThingsLinkerGSM::setModem(TLModemType type) {
+  _modem = type;
+}
+
+TLModemType ThingsLinkerGSM::modem() {
+  return _modem;
+}
+
+// Ask the modem who made it, unless the sketch chose with setModem():
+//   AT+CGMI → "SIMCOM INCORPORATED" / "Quectel"
+void ThingsLinkerGSM::_detectModem() {
+  if (_modem == TL_MODEM_AUTO) {
+    _sendAT("AT+CGMI");
+    char line[64];
+    while (_readLine(line, sizeof(line), 2000)) {
+      if (strncmp(line, "OK", 2) == 0 || strncmp(line, "ERROR", 5) == 0) break;
+      String maker(line);
+      maker.toLowerCase();
+      if (maker.indexOf("quectel") >= 0)     _modem = TL_MODEM_QUECTEL;
+      else if (maker.indexOf("simcom") >= 0) _modem = TL_MODEM_SIMCOM;
+    }
+    if (_modem == TL_MODEM_AUTO) {
+      TL_LOG("[GSM] Modem maker not recognised — using SIMCom commands "
+             "(choose with iot.setModem() if this is wrong)");
+      _modem = TL_MODEM_SIMCOM;
+    }
+  }
+  TL_LOG(_modem == TL_MODEM_QUECTEL ? "[GSM] Modem: Quectel (EC200A commands)"
+                                    : "[GSM] Modem: SIMCom (A7672 commands)");
 }
 
 void ThingsLinkerGSM::debug(bool enable) {

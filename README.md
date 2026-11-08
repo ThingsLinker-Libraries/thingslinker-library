@@ -22,7 +22,7 @@ Two variants in one library:
 | Variant | Class | Connectivity | Use when |
 |---------|-------|-------------|----------|
 | **WiFi** | `ThingsLinker` | WiFi (BLE provisioning) | Device is near a router |
-| **GSM** | `ThingsLinkerGSM` | 4G LTE via Simcom A7672 | Device is mobile or remote |
+| **GSM** | `ThingsLinkerGSM` | 4G LTE via SIMCom A7672 or Quectel EC200A | Device is mobile or remote |
 
 Both use the **exact same widget API** — `gauge()`, `onSwitch()`, `run()` etc. work identically in both.
 
@@ -369,18 +369,22 @@ Use this when your device needs to work **without WiFi** — on the road, in the
 
 **Required hardware:**
 - ESP32 (any variant)
-- Simcom **A7672SA / A7672E / A7672S** (or SIM7672) 4G LTE modem
+- One of these 4G LTE modems:
+  - SIMCom **A7672SA / A7672E / A7672S** (or SIM7672)
+  - Quectel **EC200A** (EC200x series)
+
+The library asks the modem who made it when it starts and uses that modem's own commands, so the same sketch works with either. To choose yourself (only needed for a modem that does not say who made it), call `iot.setModem(TL_MODEM_SIMCOM)` or `iot.setModem(TL_MODEM_QUECTEL)` before `iot.begin()`.
 
 **Required library:** Only **ArduinoJson** — no TinyGSM, no PubSubClient needed.
 
 ### Wiring
 
 ```
-ESP32 GPIO16 (RX2) ──── A7672 TX
-ESP32 GPIO17 (TX2) ──── A7672 RX
-ESP32 GPIO4        ──── A7672 PWRKEY
-External 4V/500mA  ──── A7672 VCC
-GND                ──── A7672 GND
+ESP32 GPIO16 (RX2) ──── modem TX
+ESP32 GPIO17 (TX2) ──── modem RX
+ESP32 GPIO4        ──── modem PWRKEY
+External 4V/500mA  ──── modem VCC
+GND                ──── modem GND
 ```
 
 ---
@@ -393,7 +397,7 @@ GND                ──── A7672 GND
 ThingsLinkerGSM iot(Serial2, "YOUR_AUTH_TOKEN", "YOUR_BLUEPRINT_KEY");
 
 // ── Option A: PWRKEY wired to a GPIO ─────────────────────────────────────────
-#define MODEM_PWR_PIN  4          // GPIO 4 → A7672 PWRKEY
+#define MODEM_PWR_PIN  4          // GPIO 4 → modem PWRKEY
 
 // ── Option B: PWRKEY not connected (modem powers on automatically) ────────────
 // #define MODEM_PWR_PIN  TL_NO_PWRKEY

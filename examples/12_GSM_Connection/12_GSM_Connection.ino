@@ -1,14 +1,14 @@
 /**
  * @file 12_GSM_Connection.ino
- * @brief ThingsLinker GSM — basic connection test with Simcom A7672 / SIM7672
+ * @brief ThingsLinker GSM — basic connection test with a 4G modem
  *
- * This sketch connects an ESP32 to ThingsLinker via a Simcom A7672 / SIM7672
- * 4G LTE modem using the ThingsLinkerGSM class.  It publishes a fake
+ * This sketch connects an ESP32 to ThingsLinker via a SIMCom A7672 / SIM7672
+ * or Quectel EC200A 4G LTE modem using the ThingsLinkerGSM class.  It publishes a fake
  * temperature reading every 5 seconds and listens for a Switch widget.
  *
  * ── Hardware ──────────────────────────────────────────────────────────────────
  *   Board : ESP32 (any variant — WROOM-32, S3, C3, etc.)
- *   Modem : Simcom A7672SA / A7672E / SIM7672G (or any SIM7600-family module)
+ *   Modem : SIMCom A7672SA / A7672E / SIM7672G, or Quectel EC200A
  *
  * ── Wiring ────────────────────────────────────────────────────────────────────
  *   ESP32 GPIO16 (RX2) ────── A7672 TX
@@ -23,7 +23,9 @@
  *   ArduinoJson   — search "ArduinoJson"   by Benoit Blanchon
  *   PubSubClient  — search "PubSubClient"  by Nick O'Leary  (WiFi variant only)
  *
- *   ThingsLinkerGSM uses native A76XX AT+CMQTT* commands — TinyGSM NOT required.
+ *   ThingsLinkerGSM finds the modem by itself (SIMCom or Quectel) and uses its
+ *   own MQTT AT commands — TinyGSM NOT required. To choose the modem yourself:
+ *     iot.setModem(TL_MODEM_QUECTEL);   // before iot.begin()
  *
  * ── Getting your credentials ─────────────────────────────────────────────────
  *   Organisation Portal → Blueprints → [Blueprint] → Devices → [Device]
