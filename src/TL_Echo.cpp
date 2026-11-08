@@ -3,7 +3,9 @@
 
 namespace {
 
-const int kSlots = 8;
+// Enough for a burst of publishes: over 4G an echo can come back after many
+// later messages have been sent
+const int kSlots = 32;
 
 struct Sent {
   uint32_t      hash;

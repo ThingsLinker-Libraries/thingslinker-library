@@ -267,12 +267,15 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   if (found < 5) return;
 
   String pin = t.substring(slashes[3] + 1, slashes[4]);
+  // The widget type as well as the pin decides the callback: several widgets
+  // can share a pin (a Terminal and a Text Input on V2, for example)
+  String type = t.substring(slashes[0] + 1, slashes[1]);
   TL_LOG("[MQTT] Pin=" + pin + "  value=" + String(value));
 
   // RGB widget: payload contains separate r, g, b fields (and optional count)
   if (!doc["r"].isNull() && !doc["g"].isNull() && !doc["b"].isNull()) {
     for (int i = 0; i < _rgbCbCount; i++) {
-      if (pin == _rgbCbs[i].pin && _rgbCbs[i].fn) {
+      if (type == "RGB" && pin == _rgbCbs[i].pin && _rgbCbs[i].fn) {
         uint8_t     r       = doc["r"].as<uint8_t>();
         uint8_t     g       = doc["g"].as<uint8_t>();
         uint8_t     b       = doc["b"].as<uint8_t>();
@@ -287,7 +290,7 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   // Joystick widget: payload contains separate x, y fields
   if (!doc["x"].isNull() && !doc["y"].isNull()) {
     for (int i = 0; i < _joystickCbCount; i++) {
-      if (pin == _joystickCbs[i].pin && _joystickCbs[i].fn) {
+      if (type == "Joystick" && pin == _joystickCbs[i].pin && _joystickCbs[i].fn) {
         float x = doc["x"].as<float>();
         float y = doc["y"].as<float>();
         _joystickCbs[i].fn(x, y);
@@ -298,7 +301,7 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   // Text callbacks (Terminal)
   for (int i = 0; i < _textCbCount; i++) {
-    if (pin == _textCbs[i].pin && _textCbs[i].fn) {
+    if (pin == _textCbs[i].pin && type == _textCbs[i].widgetType && _textCbs[i].fn) {
       char scratch[32];
       _textCbs[i].fn(tlTextOf(doc, scratch, sizeof(scratch)));
       return;
@@ -307,7 +310,7 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   // Bool callbacks (Button, Switch)
   for (int i = 0; i < _boolCbCount; i++) {
-    if (pin == _boolCbs[i].pin && _boolCbs[i].fn) {
+    if (pin == _boolCbs[i].pin && type == _boolCbs[i].widgetType && _boolCbs[i].fn) {
       _boolCbs[i].fn(tlBoolOf(doc));
       return;
     }
@@ -315,7 +318,7 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   // Float callbacks (Slider, Timer, Value Display, etc.)
   for (int i = 0; i < _floatCbCount; i++) {
-    if (pin == _floatCbs[i].pin && _floatCbs[i].fn) {
+    if (pin == _floatCbs[i].pin && type == _floatCbs[i].widgetType && _floatCbs[i].fn) {
       _floatCbs[i].fn(value);
       return;
     }
